@@ -1,0 +1,16 @@
+Requirements:
+Access the data from the API
+Retrieve the data from the API
+Display the data in a table
+
+
+
+API:
+https://github.com/Revadike/InternalSteamWebAPI
+
+Generate a simple python script that will access the API and retrieve simple data.
+
+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
+
+
+
