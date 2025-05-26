@@ -1,16 +1,21 @@
-Requirements:
+Requirements 1.0:
 Access the data from the API
 Retrieve the data from the API
 Display the data in a table
 
+Done
 
+1.1:
+- Only show items that have a sell_listings value greater than 0
+- Only show items that have a sell_price_text value greater than 0
+- Only show items that have been sold in the last 7 days
 
-API:
-https://github.com/Revadike/InternalSteamWebAPI
+Done
 
-Generate a simple python script that will access the API and retrieve simple data.
+1.2:
+- Add a search bar to the top of the page
+- Add a pagination to the bottom of the page
 
-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
-
-
+2.0:
+- Concatenate the data from the API to data from https://api.maplestory.net/version/default
 

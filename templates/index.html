@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MapleStory Steam Market Listings</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .market-item {
+            transition: background-color 0.2s;
+        }
+        .market-item:hover {
+            background-color: #f8f9fa;
+        }
+        .search-container {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>MapleStory Steam Market Listings</h1>
+            <a href="{{ url_for('view_cart') }}" class="btn btn-outline-primary position-relative">
+                <i class="bi bi-cart"></i> Cart
+                <span id="cartCount" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                    {{ session.get('cart', [])|length }}
+                </span>
+            </a>
+        </div>
+        
+        <!-- Add search form -->
+        <form method="get" class="search-container">
+            <div class="row g-3 align-items-center">
+                <div class="col-auto">
+                    <input type="text" class="form-control" name="search" placeholder="Search items..." value="{{ search_query }}">
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary">Search</button>
+                </div>
+                {% if search_query %}
+                <div class="col-auto">
+                    <a href="{{ url_for('index', 
+                        filter_sell_listings='on' if filter_sell_listings else 'off', 
+                        filter_sell_price='on' if filter_sell_price else 'off', 
+                        filter_sold_7_days='on' if filter_sold_7_days else 'off',
+                        min_price=min_price,
+                        max_price=max_price) }}" 
+                        class="btn btn-outline-secondary">Clear Search</a>
+                </div>
+                {% endif %}
+            </div>
+        </form>
+
+        <!-- Add this after the search form -->
+        <div class="row g-3 align-items-center mb-3">
+            <div class="col-auto">
+                <a href="{{ url_for('index') }}" class="btn btn-secondary">Reset All Filters</a>
+            </div>
+        </div>
+
+        <!-- Existing filter form -->
+        <form method="get" class="mb-3">
+            <input type="hidden" name="search" value="{{ request.args.get('search', '') }}">
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" name="filter_sell_listings" id="filter_sell_listings" {% if filter_sell_listings %}checked{% endif %}>
+                <label class="form-check-label" for="filter_sell_listings">Only show items with sell_listings &gt; 0</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" name="filter_sell_price" id="filter_sell_price" {% if filter_sell_price %}checked{% endif %}>
+                <label class="form-check-label" for="filter_sell_price">Only show items with sell_price_text &gt; 0</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" name="filter_sold_7_days" id="filter_sold_7_days" {% if filter_sold_7_days %}checked{% endif %}>
+                <label class="form-check-label" for="filter_sold_7_days">Only show items sold in last 7 days</label>
+            </div>
+            <div class="row g-3 align-items-center mb-3">
+                <div class="col-auto">
+                    <div class="input-group">
+                        <span class="input-group-text">$</span>
+                        <input type="number" class="form-control" name="min_price" placeholder="Min Price" value="{{ min_price }}" min="0" step="0.01">
+                        <span class="input-group-text">to</span>
+                        <input type="number" class="form-control" name="max_price" placeholder="Max Price" value="{{ max_price }}" min="0" step="0.01">
+                    </div>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm ms-2">Apply Filters</button>
+        </form>
+
+        {% if error %}
+        <div class="alert alert-danger" role="alert">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        {% if warning %}
+        <div class="alert alert-warning" role="alert">
+            Fewer results are shown because filters are applied after fetching data from the API. Try relaxing your filters or using the "Next" button for more results.
+        </div>
+        {% endif %}
+
+        {% if listings %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>
+                            <a href="{{ url_for('index', sort_by='item_name', sort_order='asc' if sort_by != 'item_name' or sort_order == 'desc' else 'desc', search=request.args.get('search', ''), filter_sell_listings='on' if filter_sell_listings else 'off', filter_sell_price='on' if filter_sell_price else 'off', filter_sold_7_days='on' if filter_sold_7_days else 'off') }}">
+                                Item Name
+                            </a>
+                        </th>
+                        <th>
+                            <a href="{{ url_for('index', sort_by='price', sort_order='asc' if sort_by != 'price' or sort_order == 'desc' else 'desc', search=request.args.get('search', ''), filter_sell_listings='on' if filter_sell_listings else 'off', filter_sell_price='on' if filter_sell_price else 'off', filter_sold_7_days='on' if filter_sold_7_days else 'off') }}">
+                                Price
+                            </a>
+                        </th>
+                        <th>
+                            <a href="{{ url_for('index', sort_by='quantity', sort_order='asc' if sort_by != 'quantity' or sort_order == 'desc' else 'desc', search=request.args.get('search', ''), filter_sell_listings='on' if filter_sell_listings else 'off', filter_sell_price='on' if filter_sell_price else 'off', filter_sold_7_days='on' if filter_sold_7_days else 'off') }}">
+                                Quantity
+                            </a>
+                        </th>
+                        <th>Image</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in listings %}
+                        <tr>
+                            <td>
+                                {% if item.image_url %}
+                                    <img src="{{ item.image_url }}" alt="{{ item.item_name }}" class="item-image me-2">
+                                {% endif %}
+                                {{ item.item_name }}
+                            </td>
+                            <td>{{ item.price }}</td>
+                            <td>{{ item.quantity }}</td>
+                            <td>
+                                {% if item.image_url %}
+                                    <img src="{{ item.image_url }}" alt="{{ item.item_name }}" width="40">
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-primary add-to-cart" 
+                                        data-item='{{ {
+                                    "item_name": item.item_name,
+                                    "price": item.price,
+                                    "price_value": item.price_value,
+                                    "quantity": item.quantity,
+                                    "image_url": item.image_url,
+                                    "market_hash_name": item.market_hash_name,
+                                    "market_id": item.market_id
+                                }|tojson }}'>
+                                    <i class="bi bi-cart-plus"></i> Add to Cart
+                                </button>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <nav aria-label="Page navigation">
+            <ul class="pagination justify-content-center">
+                {% if page > 1 %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('index', page=page-1, sort_by=sort_by, sort_order=sort_order, search=search_query, filter_sell_listings='on' if filter_sell_listings else 'off', filter_sell_price='on' if filter_sell_price else 'off', filter_sold_7_days='on' if filter_sold_7_days else 'off', min_price=min_price, max_price=max_price) }}">Previous</a>
+                    </li>
+                {% endif %}
+                
+                {% if has_more %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('index', page=page+1, sort_by=sort_by, sort_order=sort_order, search=search_query, filter_sell_listings='on' if filter_sell_listings else 'off', filter_sell_price='on' if filter_sell_price else 'off', filter_sold_7_days='on' if filter_sold_7_days else 'off', min_price=min_price, max_price=max_price) }}">Next</a>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+
+        {% else %}
+        <div class="alert alert-info" role="alert">
+            No listings found.
+        </div>
+        {% endif %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add to cart functionality
+            document.querySelectorAll('.add-to-cart').forEach(button => {
+                button.addEventListener('click', function() {
+                    const itemData = JSON.parse(this.dataset.item);
+                    fetch('/add_to_cart', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(itemData)
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.message) {
+                            // Update cart count
+                            document.getElementById('cartCount').textContent = data.cart_count;
+                            // Disable button
+                            this.disabled = true;
+                            this.innerHTML = '<i class="bi bi-check"></i> Added';
+                            
+                            // Verify the item was actually added
+                            if (!data.cart_items || !data.cart_items.some(item => item.item_name === itemData.item_name)) {
+                                console.error('Item not found in cart after adding');
+                                alert('There was an issue adding the item to your cart. Please try again.');
+                                this.disabled = false;
+                                this.innerHTML = '<i class="bi bi-cart-plus"></i> Add to Cart';
+                            }
+                        } else if (data.error) {
+                            alert(data.error);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Failed to add item to cart');
+                        this.disabled = false;
+                        this.innerHTML = '<i class="bi bi-cart-plus"></i> Add to Cart';
+                    });
+                });
+            });
+        });
+    </script>
+</body>
+</html> 
