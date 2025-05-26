@@ -1,0 +1,13 @@
+.batch-separator {
+    background-color: #f8f9fa;
+}
+
+.batch-separator hr {
+    border-color: #dee2e6;
+    margin: 0.5rem 0;
+}
+
+.batch-separator small {
+    color: #6c757d;
+    font-size: 0.875rem;
+} 
