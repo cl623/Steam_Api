@@ -6,6 +6,7 @@ import time
 from datetime import datetime, timedelta
 import re
 from flask_session import Session  # <-- Add this import
+import threading
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # Needed for session
@@ -17,6 +18,24 @@ Session(app)
 
 # MapleStory App ID
 MAPLESTORY_APP_ID = "216150"
+
+STEAMAPIS_KEY = "Oc7jRGOkx33t-hO_d9w_1ghv2io"  # <-- Replace with your actual SteamApis.com API key
+
+# In-memory rate limiting
+rate_limit = {
+    'minute': {'count': 0, 'timestamp': 0},
+    'day': {'count': 0, 'date': ''}
+}
+rate_limit_lock = threading.Lock()
+
+STEAM_COOKIES = {
+    'sessionid': 'e81e5ffc77a8f27479115336',
+    'steamLoginSecure': '76561198256203233||eyAidHlwIjogIkpXVCIsICJhbGciOiAiRWREU0EiIH0.eyAiaXNzIjogInI6MDAwMl8yNjU2QTU5M182MDM0NyIsICJzdWIiOiAiNzY1NjExOTgyNTYyMDMyMzMiLCAiYXVkIjogWyAid2ViOmNvbW11bml0eSIgXSwgImV4cCI6IDE3NDgzNzY4MTAsICJuYmYiOiAxNzM5NjQ4ODM3LCAiaWF0IjogMTc0ODI4ODgzNywgImp0aSI6ICIwMDA2XzI2NTZBNTlBXzRCNjgyIiwgIm9hdCI6IDE3NDgyODg4MzcsICJydF9leHAiOiAxNzY2NDA2MTU5LCAicGVyIjogMCwgImlwX3N1YmplY3QiOiAiNzEuMTcyLjQ2LjE2IiwgImlwX2NvbmZpcm1lciI6ICI3MS4xNzIuNDYuMTYiIH0.13cxtqtufOzSU4YT_u_dNx5YOjMM8VDDBAch2oTSVT-Z3AItRw0I-jLvbAV6wIwoEU2jVIWp1Y0UA_7inEoeCw'
+    # Add 'steamMachineAuth' if needed
+}
+
+# In-memory rate limiting for Steam price history (personal use)
+steam_rate_limit = {'minute': {'count': 0, 'timestamp': 0}}
 
 def make_request(url, headers, params=None, max_retries=3):
     """Helper function to make requests with retry logic and delay"""
@@ -36,6 +55,16 @@ def make_request(url, headers, params=None, max_retries=3):
                 raise e
             time.sleep(1)
     return None
+
+def check_steam_rate_limit():
+    now = time.time()
+    if now - steam_rate_limit['minute']['timestamp'] > 60:
+        steam_rate_limit['minute']['count'] = 0
+        steam_rate_limit['minute']['timestamp'] = now
+    if steam_rate_limit['minute']['count'] >= 20:
+        return False
+    steam_rate_limit['minute']['count'] += 1
+    return True
 
 @app.route('/', methods=['GET', 'POST'])
 def index():    
@@ -286,6 +315,38 @@ def clear_cart():
         })
     except Exception as e:
         print(f"Error in clear_cart: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/pricehistory')
+def price_history():
+    appid = request.args.get('appid')
+    market_hash_name = request.args.get('market_hash_name')
+    if not appid or not market_hash_name:
+        return jsonify({'error': 'Missing appid or market_hash_name'}), 400
+
+    # Personal rate limiting
+    if not check_steam_rate_limit():
+        return jsonify({'error': 'Rate limit exceeded: 20 requests per minute (personal use)'}), 429
+
+    url = "https://steamcommunity.com/market/pricehistory/"
+    params = {
+        'appid': appid,
+        'market_hash_name': market_hash_name,
+        'currency': 1  # USD
+    }
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    try:
+        response = requests.get(url, params=params, headers=headers, cookies=STEAM_COOKIES)
+        print("Steam response status:", response.status_code)
+        print("Steam response text:", response.text[:500])
+        if response.status_code == 200:
+            return jsonify(response.json())
+        elif response.status_code == 400 and response.text.strip() == '[]':
+            return jsonify({'success': True, 'prices': []})
+        else:
+            return jsonify({'error': f'Failed to fetch price history. Status code: {response.status_code}', 'steam_response': response.text}), 500
+    except Exception as e:
+        print("Exception in price_history:", str(e))
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':

@@ -1,0 +1,90 @@
+Should You Load Price History for Every Item on the Main Page?
+Cons:
+The Steam /market/pricehistory endpoint is rate-limited and relatively slow.
+Fetching price history for every item as you load/search would result in many API calls, slowing down your page and possibly getting you rate-limited or blocked.
+It would also increase your server’s workload and response time.
+Best Practice:
+Do NOT fetch price history for every item on the main page.
+Instead, fetch price history only when the user is specifically interested in an item (e.g., when viewing it in the cart or clicking a “View Price History” button).
+Recommended Implementation: Show Price History in the Cart
+When a user adds an item to the cart, show a “View Price History” button or tab for each item in the cart.
+When the user clicks to view price history, make a request to your backend, which will call the Steam /market/pricehistory endpoint for that specific item.
+Display the price history (e.g., as a chart) in the cart.
+Implementation Plan
+Backend:
+Add a new Flask route: /api/pricehistory?appid=...&market_hash_name=...
+This route will call the Steam API and return the price history data.
+Frontend (Cart):
+Add a “View Price History” button for each item in the cart.
+When clicked, fetch the price history from your backend and display it (e.g., with a chart library like Chart.js).
+
+
+
+
+When you manually test the Steam price history endpoint in your browser, you get a valid JSON response with price history for the item (e.g., "Bizarre Fox Mask").
+But when your Flask backend makes the same request, it gets a 400 and [].
+Why does this happen?
+Steam often requires a valid session/cookie for some endpoints, especially for price history.
+When you are logged in to Steam in your browser, you have cookies that authenticate you.
+When your backend makes the request, it does not have these cookies, so Steam may block or limit the request.
+How to Fix
+Option 1: Use Your Steam Session Cookies
+Get your Steam cookies from your browser (e.g., sessionid, steamLoginSecure).
+Add them to your request headers in your Flask backend.
+Example:
+Apply to app.py
+Replace YOUR_SESSIONID and YOUR_STEAMLOGINSECURE with your actual values from your browser.
+Option 2: Use a Public Proxy or Scraper Service
+Some services (like Steam market APIs or proxies) can fetch this data for you, but they may have rate limits or costs.
+Option 3: Inform the User
+If you want to keep your app public and not tie it to your own Steam account, you can show a message:
+“Price history is only available when logged in to Steam.”
+How to Implement Option 1 (Best for Personal Use)
+Open your browser’s DevTools (F12) on a Steam page.
+Go to the Application (Chrome) or Storage (Firefox) tab.
+Find your cookies for steamcommunity.com:
+sessionid
+steamLoginSecure
+Copy their values.
+Update your Flask code:
+Apply to app.py
+Restart your Flask app and try again.
+Security Note
+Never share your Steam cookies publicly.
+This method is best for personal/private use, not for public deployment.
+Summary
+Steam’s price history endpoint works in your browser because you are logged in.
+Your backend requests are missing the required cookies.
+Add your Steam session cookies to your backend request headers to get price history.
+Would you like step-by-step instructions for finding and using your Steam cookies?
+Let's use option 2. What are the pros and cons of this method? 
+
+Great question! Here’s a clear breakdown of Option 2: Using a Public Proxy or Scraper Service for Steam Market price history:
+Pros
+1. No Need for Your Own Steam Credentials
+You don’t have to expose or manage your personal Steam cookies or login.
+Safer for public-facing apps or demos.
+2. Easier for Multi-User/Public Use
+Anyone can use your app without needing to supply their own Steam credentials.
+No risk of leaking your own account/session.
+3. Bypasses Steam’s Browser-Only Restrictions
+Many proxies/scraper APIs are designed to work around Steam’s anti-bot measures.
+They may handle cookies, rate limits, and captchas for you.
+4. Potentially More Reliable for Bulk Data
+Some services are built for scraping large amounts of data and may be more robust than a single user session.
+Cons
+1. Rate Limits and Reliability
+Free proxies/services may have strict rate limits, downtime, or unreliable data.
+Paid services can get expensive if you need a lot of requests.
+2. Data Freshness and Completeness
+Some proxies cache data, so you might not get the most up-to-date price history.
+Some items may be missing or incomplete.
+3. Trust and Security
+You must trust the proxy/service not to tamper with or log your requests.
+If the service is shut down or changes its API, your app will break.
+4. Legal/Ethical Considerations
+Scraping Steam may violate their terms of service.
+Using a third-party service may also have its own terms and risks.
+5. Less Control
+You can’t control how the proxy fetches or parses the data.
+If Steam changes their site, the proxy may break and you’ll have to wait for them to fix it.

@@ -68,7 +68,9 @@
                 <tfoot>
                     <tr>
                         <td colspan="2" class="text-end"><strong>Total:</strong></td>
-                        <td><strong>${{ "%.2f"|format(total_price) }}</strong></td>
+                        <td><strong>${{ "%.2f"|format(total_price) }}</strong>
+                            <button id="showPriceHistory" class="btn btn-sm btn-info ms-2">Show All Price History</button>
+                        </td>
                     </tr>
                 </tfoot>
             </table>
@@ -79,9 +81,16 @@
         </div>
         {% endif %}
     </div>
+    <div id="priceHistorySection" class="mt-5"></div>
 
+    <script id="cartItemsJson" type="application/json">{{ cart_items|tojson }}</script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
+        // Parse cartItems from JSON script tag
+        const cartItems = JSON.parse(document.getElementById('cartItemsJson').textContent);
+        const appId = "{{ MAPLESTORY_APP_ID }}";
+
         document.addEventListener('DOMContentLoaded', function() {
             // Remove item from cart
             document.querySelectorAll('.remove-item').forEach(button => {
@@ -132,6 +141,69 @@
                     });
                 }
             });
+
+            // Price history logic
+            const showPriceHistoryBtn = document.getElementById('showPriceHistory');
+            if (showPriceHistoryBtn) {
+                showPriceHistoryBtn.addEventListener('click', function() {
+                    const section = document.getElementById('priceHistorySection');
+                    section.innerHTML = '<div class="text-center">Loading price history for all items...</div>';
+                    let loaded = 0;
+                    let allChartsHtml = '';
+                    cartItems.forEach((item, idx) => {
+                        fetch('/api/pricehistory?appid=' + appId + '&market_hash_name=' + encodeURIComponent(item.hash))
+                            .then(res => res.json())
+                            .then(data => {
+                                loaded++;
+                                if (data.success && data.prices && data.prices.length > 0) {
+                                    const labels = data.prices.map(p => p[0]);
+                                    const prices = data.prices.map(p => parseFloat(p[1]));
+                                    const chartId = `priceChart${idx}`;
+                                    allChartsHtml += `
+                                        <div class='mb-4'>
+                                            <h5>${item.name} Price History</h5>
+                                            <canvas id='${chartId}' height='100'></canvas>
+                                        </div>
+                                    `;
+                                    setTimeout(function() {
+                                        new Chart(document.getElementById(chartId).getContext('2d'), {
+                                            type: 'line',
+                                            data: {
+                                                labels: labels,
+                                                datasets: [{
+                                                    label: 'Price (USD)',
+                                                    data: prices,
+                                                    borderColor: 'rgba(54, 162, 235, 1)',
+                                                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                                                    fill: true,
+                                                    tension: 0.1
+                                                }]
+                                            },
+                                            options: {
+                                                scales: {
+                                                    x: { display: false },
+                                                    y: { beginAtZero: false }
+                                                }
+                                            }
+                                        });
+                                    }, 100);
+                                } else {
+                                    allChartsHtml += `<div class='mb-4'><h5>${item.name} Price History</h5><div class='text-danger'>No price history available.</div></div>`;
+                                }
+                                if (loaded === cartItems.length) {
+                                    section.innerHTML = allChartsHtml;
+                                }
+                            })
+                            .catch(function() {
+                                loaded++;
+                                allChartsHtml += `<div class='mb-4'><h5>${item.name} Price History</h5><div class='text-danger'>Failed to load price history.</div></div>`;
+                                if (loaded === cartItems.length) {
+                                    section.innerHTML = allChartsHtml;
+                                }
+                            });
+                    });
+                });
+            }
         });
     </script>
 </body>
