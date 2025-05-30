@@ -33,3 +33,9 @@ Store market data locally and train a model to predict the price of an item in t
 -Display the predicted price in the cart
 -Display the predicted price in the cart
 
+requests==2.31.0
+pandas==2.1.4
+numpy==1.26.2
+scikit-learn==1.3.2
+python-dateutil==2.8.2
+

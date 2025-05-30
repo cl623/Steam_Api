@@ -1,0 +1,147 @@
+2025-05-30 12:53:10,461 - INFO - Fetched 10 items. Total: 10
+2025-05-30 12:53:12,044 - INFO - Fetched 10 items. Total: 20
+2025-05-30 12:53:13,650 - INFO - Fetched 10 items. Total: 30
+2025-05-30 12:53:15,148 - INFO - Fetched 10 items. Total: 40
+2025-05-30 12:53:16,786 - INFO - Fetched 10 items. Total: 50
+2025-05-30 12:53:17,995 - INFO - Fetched 10 items. Total: 60
+2025-05-30 12:53:19,173 - INFO - Fetched 10 items. Total: 70
+2025-05-30 12:53:20,313 - INFO - Fetched 10 items. Total: 80
+2025-05-30 12:53:21,462 - INFO - Fetched 10 items. Total: 90
+2025-05-30 12:53:22,648 - INFO - Fetched 10 items. Total: 100
+2025-05-30 12:53:24,011 - INFO - Fetched 10 items. Total: 110
+2025-05-30 12:53:25,178 - INFO - Fetched 10 items. Total: 120
+2025-05-30 12:53:26,805 - INFO - Fetched 10 items. Total: 130
+2025-05-30 12:53:27,996 - INFO - Fetched 10 items. Total: 140
+2025-05-30 12:53:29,145 - INFO - Fetched 10 items. Total: 150
+2025-05-30 12:53:30,384 - INFO - Fetched 10 items. Total: 160
+2025-05-30 12:53:31,537 - INFO - Fetched 10 items. Total: 170
+2025-05-30 12:53:32,950 - INFO - Fetched 10 items. Total: 180
+2025-05-30 12:53:34,111 - INFO - Fetched 10 items. Total: 190
+2025-05-30 12:53:35,241 - INFO - Fetched 10 items. Total: 200
+2025-05-30 12:53:36,254 - INFO - Rate limit reached. Sleeping for 33.99 seconds
+2025-05-30 12:54:10,386 - INFO - Fetched 10 items. Total: 210
+2025-05-30 12:54:11,537 - INFO - Fetched 10 items. Total: 220
+2025-05-30 12:54:12,708 - INFO - Fetched 10 items. Total: 230
+2025-05-30 12:54:13,857 - INFO - Fetched 10 items. Total: 240
+2025-05-30 12:54:15,283 - INFO - Fetched 10 items. Total: 250
+2025-05-30 12:54:16,408 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:54:21,503 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:54:26,634 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:54:31,810 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:54:36,911 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:54:42,067 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:54:47,163 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:54:52,302 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:54:57,410 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:55:02,515 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:55:07,620 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:55:12,734 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:55:17,860 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:55:22,957 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:55:28,068 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:55:33,196 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:55:38,293 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:55:43,628 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:55:48,729 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:55:53,839 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:55:58,946 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:56:04,061 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:56:09,168 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:56:14,273 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:56:19,412 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:56:24,574 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:56:29,720 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:56:34,826 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:56:39,928 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 12:56:45,135 - ERROR - Error fetching items: 'NoneType' object has no attribute 'get'
+2025-05-30 13:01:45,841 - INFO - Fetched 10 items. Total: 10
+2025-05-30 13:01:56,290 - INFO - Fetched 10 items. Total: 20
+2025-05-30 13:02:06,806 - INFO - Fetched 10 items. Total: 30
+2025-05-30 13:02:17,010 - INFO - Fetched 10 items. Total: 40
+2025-05-30 13:02:31,931 - INFO - Fetched 10 items. Total: 50
+2025-05-30 13:02:42,728 - INFO - Fetched 10 items. Total: 60
+2025-05-30 13:02:53,607 - INFO - Fetched 10 items. Total: 70
+2025-05-30 13:03:04,257 - INFO - Fetched 10 items. Total: 80
+2025-05-30 13:03:14,942 - INFO - Fetched 10 items. Total: 90
+2025-05-30 13:03:25,369 - INFO - Fetched 10 items. Total: 100
+2025-05-30 13:03:35,715 - INFO - Fetched 10 items. Total: 110
+2025-05-30 13:03:45,975 - INFO - Fetched 10 items. Total: 120
+2025-05-30 13:03:56,329 - INFO - Fetched 10 items. Total: 130
+2025-05-30 13:04:07,125 - INFO - Fetched 10 items. Total: 140
+2025-05-30 13:04:17,663 - INFO - Fetched 10 items. Total: 150
+2025-05-30 13:04:37,791 - INFO - No more items to fetch
+2025-05-30 13:04:55,722 - INFO - Rate limit reached. Sleeping for 0.26 seconds
+2025-05-30 13:05:18,786 - INFO - Rate limit reached. Sleeping for 37.20 seconds
+2025-05-30 13:06:18,830 - INFO - Rate limit reached. Sleeping for 37.17 seconds
+2025-05-30 13:07:13,799 - WARNING - Not enough data to train model for item 41
+2025-05-30 13:07:13,801 - WARNING - Not enough data to train model for item 95
+2025-05-30 13:07:13,802 - WARNING - Not enough data to train model for item 8
+2025-05-30 13:07:13,803 - WARNING - Not enough data to train model for item 147
+2025-05-30 13:07:13,805 - WARNING - Not enough data to train model for item 133
+2025-05-30 13:07:13,807 - WARNING - Not enough data to train model for item 79
+2025-05-30 13:07:13,808 - WARNING - Not enough data to train model for item 149
+2025-05-30 13:07:13,810 - WARNING - Not enough data to train model for item 102
+2025-05-30 13:07:13,812 - WARNING - Not enough data to train model for item 92
+2025-05-30 13:07:13,814 - WARNING - Not enough data to train model for item 128
+2025-05-30 13:07:13,814 - WARNING - Not enough data to train model for item 42
+2025-05-30 13:07:13,816 - WARNING - Not enough data to train model for item 7
+2025-05-30 13:07:13,817 - WARNING - Not enough data to train model for item 132
+2025-05-30 13:07:13,819 - WARNING - Not enough data to train model for item 130
+2025-05-30 13:07:13,820 - WARNING - Not enough data to train model for item 91
+2025-05-30 13:07:13,822 - WARNING - Not enough data to train model for item 121
+2025-05-30 13:07:13,823 - WARNING - Not enough data to train model for item 125
+2025-05-30 13:07:13,825 - WARNING - Not enough data to train model for item 144
+2025-05-30 13:07:13,826 - WARNING - Not enough data to train model for item 107
+2025-05-30 13:07:13,828 - WARNING - Not enough data to train model for item 110
+2025-05-30 13:07:13,829 - WARNING - Not enough data to train model for item 126
+2025-05-30 13:07:13,831 - WARNING - Not enough data to train model for item 3
+2025-05-30 13:07:13,832 - WARNING - Not enough data to train model for item 137
+2025-05-30 13:07:13,834 - WARNING - Not enough data to train model for item 10
+2025-05-30 13:07:13,835 - WARNING - Not enough data to train model for item 105
+2025-05-30 13:07:13,837 - WARNING - Not enough data to train model for item 78
+2025-05-30 13:07:13,838 - WARNING - Not enough data to train model for item 76
+2025-05-30 13:07:13,840 - WARNING - Not enough data to train model for item 143
+2025-05-30 13:07:13,841 - WARNING - Not enough data to train model for item 106
+2025-05-30 13:07:13,843 - WARNING - Not enough data to train model for item 98
+2025-05-30 13:07:13,844 - WARNING - Not enough data to train model for item 9
+2025-05-30 13:07:13,846 - WARNING - Not enough data to train model for item 127
+2025-05-30 13:07:13,848 - WARNING - Not enough data to train model for item 131
+2025-05-30 13:07:13,849 - WARNING - Not enough data to train model for item 103
+2025-05-30 13:07:13,850 - WARNING - Not enough data to train model for item 94
+2025-05-30 13:07:13,852 - WARNING - Not enough data to train model for item 50
+2025-05-30 13:07:13,854 - WARNING - Not enough data to train model for item 135
+2025-05-30 13:07:13,855 - WARNING - Not enough data to train model for item 80
+2025-05-30 13:07:13,857 - WARNING - Not enough data to train model for item 122
+2025-05-30 13:07:13,858 - WARNING - Not enough data to train model for item 139
+2025-05-30 13:07:13,859 - WARNING - Not enough data to train model for item 109
+2025-05-30 13:07:13,861 - WARNING - Not enough data to train model for item 96
+2025-05-30 13:07:13,863 - WARNING - Not enough data to train model for item 129
+2025-05-30 13:07:13,864 - WARNING - Not enough data to train model for item 48
+2025-05-30 13:07:13,865 - WARNING - Not enough data to train model for item 148
+2025-05-30 13:07:13,867 - WARNING - Not enough data to train model for item 138
+2025-05-30 13:07:13,868 - WARNING - Not enough data to train model for item 1
+2025-05-30 13:07:13,870 - WARNING - Not enough data to train model for item 93
+2025-05-30 13:07:13,871 - WARNING - Not enough data to train model for item 140
+2025-05-30 13:07:13,872 - WARNING - Not enough data to train model for item 4
+2025-05-30 13:07:13,874 - WARNING - Not enough data to train model for item 145
+2025-05-30 13:07:13,875 - WARNING - Not enough data to train model for item 134
+2025-05-30 13:07:13,877 - WARNING - Not enough data to train model for item 100
+2025-05-30 13:07:13,878 - WARNING - Not enough data to train model for item 101
+2025-05-30 13:07:13,879 - WARNING - Not enough data to train model for item 97
+2025-05-30 13:07:13,882 - WARNING - Not enough data to train model for item 75
+2025-05-30 13:07:13,883 - WARNING - Not enough data to train model for item 104
+2025-05-30 13:07:13,884 - WARNING - Not enough data to train model for item 49
+2025-05-30 13:07:13,886 - WARNING - Not enough data to train model for item 99
+2025-05-30 13:07:13,887 - WARNING - Not enough data to train model for item 142
+2025-05-30 13:07:13,889 - WARNING - Not enough data to train model for item 136
+2025-05-30 13:07:13,891 - WARNING - Not enough data to train model for item 150
+2025-05-30 13:07:13,892 - WARNING - Not enough data to train model for item 108
+2025-05-30 13:07:13,893 - WARNING - Not enough data to train model for item 5
+2025-05-30 13:07:13,895 - WARNING - Not enough data to train model for item 123
+2025-05-30 13:07:13,897 - WARNING - Not enough data to train model for item 146
+2025-05-30 13:07:13,898 - WARNING - Not enough data to train model for item 47
+2025-05-30 13:07:13,899 - WARNING - Not enough data to train model for item 6
+2025-05-30 13:07:13,901 - WARNING - Not enough data to train model for item 124
+2025-05-30 13:07:13,903 - WARNING - Not enough data to train model for item 77
+2025-05-30 13:07:13,905 - WARNING - Not enough data to train model for item 141
+2025-05-30 13:07:13,906 - WARNING - Not enough data to train model for item 2

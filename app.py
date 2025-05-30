@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 import re
 from flask_session import Session  # <-- Add this import
 import threading
+from functools import lru_cache
+import urllib.parse
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # Needed for session
@@ -20,7 +22,8 @@ Session(app)
 MAPLESTORY_APP_ID = "216150"
 
 STEAMAPIS_KEY = "Oc7jRGOkx33t-hO_d9w_1ghv2io"  # <-- Replace with your actual SteamApis.com API key
-
+STEAM_LOGIN_SECURE = "76561198098290013||eyAidHlwIjogIkpXVCIsICJhbGciOiAiRWREU0EiIH0.eyAiaXNzIjogInI6MDAwNF8yNjVGRTE0RF9GOUMxMyIsICJzdWIiOiAiNzY1NjExOTgwOTgyOTAwMTMiLCAiYXVkIjogWyAid2ViOmNvbW11bml0eSIgXSwgImV4cCI6IDE3NDg2MjMyOTQsICJuYmYiOiAxNzM5ODk1NTIyLCAiaWF0IjogMTc0ODUzNTUyMiwgImp0aSI6ICIwMDBCXzI2NUZFMTQzX0QzMTdBIiwgIm9hdCI6IDE3NDg1MzU1MjIsICJydF9leHAiOiAxNzUxMTM4MTYxLCAicGVyIjogMCwgImlwX3N1YmplY3QiOiAiNzEuMTcyLjQ2LjE2IiwgImlwX2NvbmZpcm1lciI6ICI3MS4xNzIuNDYuMTYiIH0.jrX81LRURwO6djTZZxKTyYEnyYQBe98DAf5wNO6BpL9vihwTcwJG_2LVBAcP8E4ZBIu43ABW7VxlmKais_XKAg"
+STEAM_SESSION_ID = "e81e5ffc77a8f27479115336"
 # In-memory rate limiting
 rate_limit = {
     'minute': {'count': 0, 'timestamp': 0},
@@ -29,13 +32,17 @@ rate_limit = {
 rate_limit_lock = threading.Lock()
 
 STEAM_COOKIES = {
-    'sessionid': 'e81e5ffc77a8f27479115336',
-    'steamLoginSecure': '76561198256203233||eyAidHlwIjogIkpXVCIsICJhbGciOiAiRWREU0EiIH0.eyAiaXNzIjogInI6MDAwMl8yNjU2QTU5M182MDM0NyIsICJzdWIiOiAiNzY1NjExOTgyNTYyMDMyMzMiLCAiYXVkIjogWyAid2ViOmNvbW11bml0eSIgXSwgImV4cCI6IDE3NDgzNzY4MTAsICJuYmYiOiAxNzM5NjQ4ODM3LCAiaWF0IjogMTc0ODI4ODgzNywgImp0aSI6ICIwMDA2XzI2NTZBNTlBXzRCNjgyIiwgIm9hdCI6IDE3NDgyODg4MzcsICJydF9leHAiOiAxNzY2NDA2MTU5LCAicGVyIjogMCwgImlwX3N1YmplY3QiOiAiNzEuMTcyLjQ2LjE2IiwgImlwX2NvbmZpcm1lciI6ICI3MS4xNzIuNDYuMTYiIH0.13cxtqtufOzSU4YT_u_dNx5YOjMM8VDDBAch2oTSVT-Z3AItRw0I-jLvbAV6wIwoEU2jVIWp1Y0UA_7inEoeCw'
+    'sessionid': STEAM_SESSION_ID,
+    'steamLoginSecure': STEAM_LOGIN_SECURE
     # Add 'steamMachineAuth' if needed
 }
 
 # In-memory rate limiting for Steam price history (personal use)
 steam_rate_limit = {'minute': {'count': 0, 'timestamp': 0}}
+
+# Add after other global variables
+PRICE_HISTORY_CACHE = {}
+PRICE_HISTORY_CACHE_DURATION = 300  # 5 minutes in seconds
 
 def make_request(url, headers, params=None, max_retries=3):
     """Helper function to make requests with retry logic and delay"""
@@ -65,6 +72,18 @@ def check_steam_rate_limit():
         return False
     steam_rate_limit['minute']['count'] += 1
     return True
+
+def get_cached_price_history(appid, market_hash_name):
+    cache_key = f"{appid}_{market_hash_name}"
+    if cache_key in PRICE_HISTORY_CACHE:
+        cache_time, cache_data = PRICE_HISTORY_CACHE[cache_key]
+        if time.time() - cache_time < PRICE_HISTORY_CACHE_DURATION:
+            return cache_data
+    return None
+
+def set_cached_price_history(appid, market_hash_name, data):
+    cache_key = f"{appid}_{market_hash_name}"
+    PRICE_HISTORY_CACHE[cache_key] = (time.time(), data)
 
 @app.route('/', methods=['GET', 'POST'])
 def index():    
@@ -321,30 +340,80 @@ def clear_cart():
 def price_history():
     appid = request.args.get('appid')
     market_hash_name = request.args.get('market_hash_name')
+    clear_cache = request.args.get('clear_cache', '0') == '1'
+    
+    # Debug logging
+    print("Price History Request:")
+    print(f"AppID: {appid}")
+    print(f"Market Hash Name: {market_hash_name}")
+    
     if not appid or not market_hash_name:
         return jsonify({'error': 'Missing appid or market_hash_name'}), 400
+
+    # Optionally clear cache for this item
+    cache_key = f"{appid}_{market_hash_name}"
+    if clear_cache and cache_key in PRICE_HISTORY_CACHE:
+        del PRICE_HISTORY_CACHE[cache_key]
+        print(f"Cache cleared for {cache_key}")
+
+    # Check cache first
+    cached_data = get_cached_price_history(appid, market_hash_name)
+    if cached_data:
+        print("Returning cached price history data")
+        return jsonify(cached_data)
 
     # Personal rate limiting
     if not check_steam_rate_limit():
         return jsonify({'error': 'Rate limit exceeded: 20 requests per minute (personal use)'}), 429
 
     url = "https://steamcommunity.com/market/pricehistory/"
+    encoded_hash_name = urllib.parse.quote(market_hash_name, safe='')
     params = {
         'appid': appid,
-        'market_hash_name': market_hash_name,
+        'market_hash_name': market_hash_name,  # requests will encode, but let's log both
         'currency': 1  # USD
     }
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': f'https://steamcommunity.com/market/listings/{appid}/{encoded_hash_name}'
+    }
+    
     try:
+        print("Making request to Steam with params:", params)
+        print("Encoded market_hash_name:", encoded_hash_name)
+        print("Using headers:", headers)
+        print("Using cookies:", STEAM_COOKIES)
+        
+        time.sleep(1)  # 1 second delay between requests
         response = requests.get(url, params=params, headers=headers, cookies=STEAM_COOKIES)
         print("Steam response status:", response.status_code)
-        print("Steam response text:", response.text[:500])
+        print("Steam response headers:", dict(response.headers))
+        print("Steam response text:", response.text[:1000])
+        
         if response.status_code == 200:
-            return jsonify(response.json())
+            data = response.json()
+            set_cached_price_history(appid, market_hash_name, data)
+            return jsonify(data)
         elif response.status_code == 400 and response.text.strip() == '[]':
-            return jsonify({'success': True, 'prices': []})
+            empty_data = {'success': True, 'prices': []}
+            set_cached_price_history(appid, market_hash_name, empty_data)
+            return jsonify(empty_data)
+        elif response.status_code == 429:
+            if cached_data:
+                print("Rate limited, returning expired cache")
+                return jsonify(cached_data)
+            return jsonify({
+                'error': 'Steam rate limit exceeded. Please try again in a few minutes.',
+                'request_params': params
+            }), 429
         else:
-            return jsonify({'error': f'Failed to fetch price history. Status code: {response.status_code}', 'steam_response': response.text}), 500
+            return jsonify({
+                'error': f'Failed to fetch price history. Status code: {response.status_code}',
+                'steam_response': response.text,
+                'request_params': params
+            }), 500
     except Exception as e:
         print("Exception in price_history:", str(e))
         return jsonify({'error': str(e)}), 500
