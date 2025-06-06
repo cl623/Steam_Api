@@ -1,0 +1,17 @@
+# Database files
+market_data.db
+market_data.db-shm
+market_data.db-wal
+steam_market.db
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Logs
+logs/
+*.log
+
+# Session files
+flask_session/ 
