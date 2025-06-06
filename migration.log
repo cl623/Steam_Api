@@ -1,0 +1,5 @@
+2025-06-02 21:58:41,493 - INFO - Adding game_id column to items table
+2025-06-02 21:58:41,504 - INFO - Migration completed successfully
+2025-06-02 22:00:41,858 - INFO - game_id column already exists
+2025-06-02 22:38:57,071 - INFO - Adding app_id column to items table...
+2025-06-02 22:38:57,081 - INFO - Successfully added app_id column and updated existing items

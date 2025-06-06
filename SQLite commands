@@ -1,0 +1,35 @@
+# Open the database
+sqlite3 market_data.db
+
+# Once inside SQLite, you can run these useful commands:
+
+# Show all tables
+.tables
+
+# Show the schema of the items table
+.schema items
+
+# Show the schema of the price_history table
+.schema price_history
+
+# Query examples:
+# Get all items
+SELECT * FROM items;
+
+# Get the latest price history for a specific item
+SELECT ph.*, i.name 
+FROM price_history ph 
+JOIN items i ON ph.item_id = i.id 
+WHERE i.market_hash_name = 'your_item_name' 
+ORDER BY ph.timestamp DESC 
+LIMIT 10;
+
+# Get items with their latest prices
+SELECT i.name, i.market_hash_name, MAX(ph.price) as latest_price
+FROM items i
+LEFT JOIN price_history ph ON i.id = ph.item_id
+GROUP BY i.id
+ORDER BY latest_price DESC;
+
+# Exit SQLite
+.quit
