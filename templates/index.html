@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MapleStory Steam Market Listings</title>
+    <title>{{ games[selected_game] }} Steam Market Listings</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         .market-item {
@@ -20,7 +20,7 @@
 <body>
     <div class="container mt-5">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1>MapleStory Steam Market Listings</h1>
+            <h1>{{ games[selected_game] }} Steam Market Listings</h1>
             <a href="{{ url_for('view_cart') }}" class="btn btn-outline-primary position-relative">
                 <i class="bi bi-cart"></i> Cart
                 <span id="cartCount" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
@@ -33,6 +33,13 @@
         <form method="get" class="search-container">
             <div class="row g-3 align-items-center">
                 <div class="col-auto">
+                    <select name="game" class="form-select" onchange="this.form.submit()">
+                        {% for game_id, game_name in games.items() %}
+                            <option value="{{ game_id }}" {% if game_id == selected_game %}selected{% endif %}>{{ game_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-auto">
                     <input type="text" class="form-control" name="search" placeholder="Search items..." value="{{ search_query }}">
                 </div>
                 <div class="col-auto">
@@ -41,6 +48,7 @@
                 {% if search_query %}
                 <div class="col-auto">
                     <a href="{{ url_for('index', 
+                        game=selected_game,
                         filter_sell_listings='on' if filter_sell_listings else 'off', 
                         filter_sell_price='on' if filter_sell_price else 'off', 
                         filter_sold_7_days='on' if filter_sold_7_days else 'off',
@@ -55,7 +63,7 @@
         <!-- Add this after the search form -->
         <div class="row g-3 align-items-center mb-3">
             <div class="col-auto">
-                <a href="{{ url_for('index') }}" class="btn btn-secondary">Reset All Filters</a>
+                <a href="{{ url_for('index', game=selected_game) }}" class="btn btn-secondary">Reset All Filters</a>
             </div>
         </div>
 
@@ -148,15 +156,36 @@
                                     "quantity": item.quantity,
                                     "image_url": item.image_url,
                                     "market_hash_name": item.market_hash_name,
-                                    "market_id": item.market_id
+                                    "market_id": item.market_id,
+                                    "game_id": selected_game
                                 }|tojson }}'>
                                     <i class="bi bi-cart-plus"></i> Add to Cart
+                                </button>
+                                <button class="btn btn-sm btn-info view-price-history" 
+                                        data-market-hash-name="{{ item.market_hash_name }}"
+                                        data-app-id="{{ selected_game }}">
+                                    <i class="bi bi-graph-up"></i> Price History
                                 </button>
                             </td>
                         </tr>
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+
+        <!-- Price History Modal -->
+        <div class="modal fade" id="priceHistoryModal" tabindex="-1" aria-labelledby="priceHistoryModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="priceHistoryModalLabel">Price History</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <canvas id="priceHistoryChart"></canvas>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Pagination -->
@@ -184,8 +213,11 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            let priceHistoryChart = null;
+
             // Add to cart functionality
             document.querySelectorAll('.add-to-cart').forEach(button => {
                 button.addEventListener('click', function() {
@@ -223,6 +255,75 @@
                         this.disabled = false;
                         this.innerHTML = '<i class="bi bi-cart-plus"></i> Add to Cart';
                     });
+                });
+            });
+
+            // Price History functionality
+            document.querySelectorAll('.view-price-history').forEach(button => {
+                button.addEventListener('click', function() {
+                    const marketHashName = this.dataset.marketHashName;
+                    const appId = this.dataset.appId;
+                    
+                    // Show loading state
+                    const modal = new bootstrap.Modal(document.getElementById('priceHistoryModal'));
+                    modal.show();
+                    
+                    // Fetch price history
+                    fetch(`/api/pricehistory?appid=${appId}&market_hash_name=${encodeURIComponent(marketHashName)}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.error) {
+                                alert(data.error);
+                                return;
+                            }
+
+                            // Destroy existing chart if it exists
+                            if (priceHistoryChart) {
+                                priceHistoryChart.destroy();
+                            }
+
+                            // Prepare data for chart
+                            const prices = data.prices || [];
+                            const labels = prices.map(p => new Date(p[0] * 1000).toLocaleDateString());
+                            const values = prices.map(p => p[1]);
+
+                            // Create new chart
+                            const ctx = document.getElementById('priceHistoryChart').getContext('2d');
+                            priceHistoryChart = new Chart(ctx, {
+                                type: 'line',
+                                data: {
+                                    labels: labels,
+                                    datasets: [{
+                                        label: 'Price History',
+                                        data: values,
+                                        borderColor: 'rgb(75, 192, 192)',
+                                        tension: 0.1
+                                    }]
+                                },
+                                options: {
+                                    responsive: true,
+                                    scales: {
+                                        y: {
+                                            beginAtZero: false,
+                                            title: {
+                                                display: true,
+                                                text: 'Price (USD)'
+                                            }
+                                        },
+                                        x: {
+                                            title: {
+                                                display: true,
+                                                text: 'Date'
+                                            }
+                                        }
+                                    }
+                                }
+                            });
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            alert('Failed to fetch price history');
+                        });
                 });
             });
         });

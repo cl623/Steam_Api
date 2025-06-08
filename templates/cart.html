@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shopping Cart - MapleStory Steam Market</title>
+    <title>Shopping Cart - Steam Market</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
 </head>
@@ -33,6 +33,7 @@
                 <thead>
                     <tr>
                         <th>Item</th>
+                        <th>Game</th>
                         <th>Price</th>
                         <th>Actions</th>
                     </tr>
@@ -47,7 +48,7 @@
                                 {% endif %}
                                 <div>
                                     <div>{{ item.name }}</div>
-                                    <a href="https://steamcommunity.com/market/listings/{{ MAPLESTORY_APP_ID }}/{{ item.hash }}" 
+                                    <a href="https://steamcommunity.com/market/listings/{{ item.game_id }}/{{ item.hash }}" 
                                        target="_blank" 
                                        class="btn btn-sm btn-outline-primary mt-1">
                                         <i class="bi bi-steam"></i> View on Steam Market
@@ -55,6 +56,7 @@
                                 </div>
                             </div>
                         </td>
+                        <td>{{ games[item.game_id] }}</td>
                         <td>${{ "%.2f"|format(item.price) }}</td>
                         <td>
                             <button class="btn btn-sm btn-outline-danger remove-item" 
@@ -67,7 +69,7 @@
                 </tbody>
                 <tfoot>
                     <tr>
-                        <td colspan="2" class="text-end"><strong>Total:</strong></td>
+                        <td colspan="3" class="text-end"><strong>Total:</strong></td>
                         <td><strong>${{ "%.2f"|format(total_price) }}</strong>
                             <button id="showPriceHistory" class="btn btn-sm btn-info ms-2">Show All Price History</button>
                         </td>
@@ -89,7 +91,6 @@
     <script>
         // Parse cartItems from JSON script tag
         const cartItems = JSON.parse(document.getElementById('cartItemsJson').textContent);
-        const appId = "{{ MAPLESTORY_APP_ID }}";
 
         document.addEventListener('DOMContentLoaded', function() {
             // Remove item from cart
@@ -151,7 +152,7 @@
                     let loaded = 0;
                     let allChartsHtml = '';
                     cartItems.forEach((item, idx) => {
-                        fetch('/api/pricehistory?appid=' + appId + '&market_hash_name=' + encodeURIComponent(item.hash))
+                        fetch('/api/pricehistory?appid=' + item.game_id + '&market_hash_name=' + encodeURIComponent(item.hash))
                             .then(res => res.json())
                             .then(data => {
                                 loaded++;
