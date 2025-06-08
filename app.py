@@ -16,6 +16,15 @@ app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_PERMANENT'] = False
 Session(app)
 
+# Game IDs and Names
+GAMES = {
+    '216150': 'MapleStory',
+    '730': 'Counter-Strike 2'
+}
+
+# Default game ID
+DEFAULT_GAME_ID = '216150'  # MapleStory
+
 # MapleStory App ID
 MAPLESTORY_APP_ID = "216150"
 
@@ -29,8 +38,8 @@ rate_limit = {
 rate_limit_lock = threading.Lock()
 
 STEAM_COOKIES = {
-    'sessionid': 'e81e5ffc77a8f27479115336',
-    'steamLoginSecure': '76561198256203233||eyAidHlwIjogIkpXVCIsICJhbGciOiAiRWREU0EiIH0.eyAiaXNzIjogInI6MDAwMl8yNjU2QTU5M182MDM0NyIsICJzdWIiOiAiNzY1NjExOTgyNTYyMDMyMzMiLCAiYXVkIjogWyAid2ViOmNvbW11bml0eSIgXSwgImV4cCI6IDE3NDgzNzY4MTAsICJuYmYiOiAxNzM5NjQ4ODM3LCAiaWF0IjogMTc0ODI4ODgzNywgImp0aSI6ICIwMDA2XzI2NTZBNTlBXzRCNjgyIiwgIm9hdCI6IDE3NDgyODg4MzcsICJydF9leHAiOiAxNzY2NDA2MTU5LCAicGVyIjogMCwgImlwX3N1YmplY3QiOiAiNzEuMTcyLjQ2LjE2IiwgImlwX2NvbmZpcm1lciI6ICI3MS4xNzIuNDYuMTYiIH0.13cxtqtufOzSU4YT_u_dNx5YOjMM8VDDBAch2oTSVT-Z3AItRw0I-jLvbAV6wIwoEU2jVIWp1Y0UA_7inEoeCw'
+    'sessionid': 'acc776ba86880c3cca3d9697',
+    'steamLoginSecure': '76561198098290013%7C%7CeyAidHlwIjogIkpXVCIsICJhbGciOiAiRWREU0EiIH0.eyAiaXNzIjogInI6MDAwRF8yNjY4RkI0RV8xOEEzMyIsICJzdWIiOiAiNzY1NjExOTgwOTgyOTAwMTMiLCAiYXVkIjogWyAid2ViOmNvbW11bml0eSIgXSwgImV4cCI6IDE3NDkzMjIyMjUsICJuYmYiOiAxNzQwNTk0MTU0LCAiaWF0IjogMTc0OTIzNDE1NCwgImp0aSI6ICIwMDBCXzI2NkM1M0FEX0FGMjc0IiwgIm9hdCI6IDE3NDkyMzQxNTQsICJydF9leHAiOiAxNzUxODQ5MjcwLCAicGVyIjogMCwgImlwX3N1YmplY3QiOiAiMTA4LjM1LjIwMS4yMjgiLCAiaXBfY29uZmlybWVyIjogIjEwOC4zNS4yMDEuMjI4IiB9.LHtbFvRyvYe-aDBvcn5uNWPPUzoYQiiiNc_KAgH0H4mjVO2e1eAh7uCW9BKEZnAaMA8y18aXdTm-5OPS4DuCBw'
     # Add 'steamMachineAuth' if needed
 }
 
@@ -75,6 +84,7 @@ def index():
     search_query = request.args.get('search', '')
     min_price = request.args.get('min_price', '')
     max_price = request.args.get('max_price', '')
+    selected_game = request.args.get('game', DEFAULT_GAME_ID)
 
     filter_sell_listings = request.args.get('filter_sell_listings', 'off') == 'on'
     filter_sell_price = request.args.get('filter_sell_price', 'off') == 'on'
@@ -88,14 +98,17 @@ def index():
     # Fetch items for the current page
     params = {
         'query': search_query,
-        'appid': '216150',
+        'appid': selected_game,
         'norender': 1,
         'count': per_page,
         'start': api_start
     }
     response = make_request("https://steamcommunity.com/market/search/render/", headers, params)
     if not response or response.status_code != 200:
-        return render_template('index.html', error=f"Failed to fetch data. Status code: {response.status_code if response else 'No response'}")
+        return render_template('index.html', 
+                             error=f"Failed to fetch data. Status code: {response.status_code if response else 'No response'}",
+                             games=GAMES,
+                             selected_game=selected_game)
 
     data = response.json()
     results = data.get('results', [])
@@ -154,7 +167,9 @@ def index():
         search_query=search_query,
         min_price=min_price,
         max_price=max_price,
-        has_more=has_more
+        has_more=has_more,
+        games=GAMES,
+        selected_game=selected_game
     )
 
 @app.route('/api/listings')
@@ -211,12 +226,13 @@ def add_to_cart():
             session['cart'] = []
             session.modified = True
 
-        # Create a minimal version of the item data, now including image_url
+        # Create a minimal version of the item data, now including image_url and game_id
         minimal_item = {
             'name': item_data['item_name'],
             'price': item_data['price_value'],
             'hash': item_data['market_hash_name'],
-            'image_url': item_data.get('image_url', '')
+            'image_url': item_data.get('image_url', ''),
+            'game_id': item_data.get('game_id', DEFAULT_GAME_ID)  # Add game_id
         }
 
         # Check if item is already in cart using item_name
@@ -289,14 +305,14 @@ def view_cart():
         return render_template('cart.html', 
                              cart_items=cart_items,
                              total_price=total_price,
-                             MAPLESTORY_APP_ID=MAPLESTORY_APP_ID)
+                             games=GAMES)
     except Exception as e:
         print(f"Error in view_cart: {str(e)}")
         return render_template('cart.html', 
                              error=str(e),
                              cart_items=[],
                              total_price=0,
-                             MAPLESTORY_APP_ID=MAPLESTORY_APP_ID)
+                             games=GAMES)
 
 @app.route('/clear_cart', methods=['POST'])
 def clear_cart():
@@ -323,6 +339,10 @@ def price_history():
     market_hash_name = request.args.get('market_hash_name')
     if not appid or not market_hash_name:
         return jsonify({'error': 'Missing appid or market_hash_name'}), 400
+
+    # Validate appid
+    if appid not in GAMES:
+        return jsonify({'error': f'Invalid appid: {appid}'}), 400
 
     # Personal rate limiting
     if not check_steam_rate_limit():
