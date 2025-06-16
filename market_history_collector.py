@@ -87,10 +87,34 @@ class SteamMarketCollector:
         self.stop_event = threading.Event()
         self.item_freshness = {}
         self.freshness_lock = threading.Lock()
-        self.worker_sleep_times = {
-            'Worker-1': 10,
-            'Worker-2': 15
+        
+        # Add game-specific queues and tracking
+        self.games = {
+            '216150': 'MapleStory',
+            '730': 'Counter-Strike 2'
         }
+        self.game_queues = {
+            game_id: [] for game_id in self.games
+        }
+        self.game_queue_locks = {
+            game_id: threading.Lock() for game_id in self.games
+        }
+        
+        # Batch and page size configuration
+        self.page_size = 10  # Items per API request
+        self.total_batch_size = 100  # Total items in a complete batch
+        self.items_per_game = self.total_batch_size // len(self.games)  # Items per game in a batch
+        self.pages_per_game = self.items_per_game // self.page_size  # Pages needed per game
+        
+        # Add error tracking and recovery
+        self.failed_items = {}  # Track failed items per game
+        self.failed_items_lock = threading.Lock()
+        self.max_retries = 3
+        self.retry_delay = 60  # seconds
+        
+        # Add data validation thresholds
+        self.min_price_history_entries = 5
+        self.max_price_deviation = 0.5  # 50% price deviation threshold
         
         # Initialize database
         self.init_database()
@@ -98,13 +122,7 @@ class SteamMarketCollector:
         # Steam API configuration
         self.steam_cookies = {
             'sessionid': 'acc776ba86880c3cca3d9697',
-            'steamLoginSecure': '76561198098290013%7C%7CeyAidHlwIjogIkpXVCIsICJhbGciOiAiRWREU0EiIH0.eyAiaXNzIjogInI6MDAwRF8yNjY4RkI0RV8xOEEzMyIsICJzdWIiOiAiNzY1NjExOTgwOTgyOTAwMTMiLCAiYXVkIjogWyAid2ViOmNvbW11bml0eSIgXSwgImV4cCI6IDE3NDk1ODY3NTgsICJuYmYiOiAxNzQwODU4ODY1LCAiaWF0IjogMTc0OTQ5ODg2NSwgImp0aSI6ICIwMDBCXzI2NkM1M0VBX0QyNjNEIiwgIm9hdCI6IDE3NDkyMzQxNTQsICJydF9leHAiOiAxNzUxODQ5MjcwLCAicGVyIjogMCwgImlwX3N1YmplY3QiOiAiMTA4LjM1LjIwMS4yMjgiLCAiaXBfY29uZmlybWVyIjogIjEwOC4zNS4yMDEuMjI4IiB9.EXfkV1OdC4BOsrdS88BM6D2lI3tuLdNor8H5Hzyp-UDQ9pPmrNsflUVNHdJsovVdL9FxkyTg1FmB3G8AFadTDA'
-        }
-        
-        # Supported games
-        self.games = {
-            '216150': 'MapleStory',
-            '730': 'Counter-Strike 2'
+            'steamLoginSecure': '76561198098290013%7C%7CeyAidHlwIjogIkpXVCIsICJhbGciOiAiRWREU0EiIH0.eyAiaXNzIjogInI6MDAwRF8yNjY4RkI0RV8xOEEzMyIsICJzdWIiOiAiNzY1NjExOTgwOTgyOTAwMTMiLCAiYXVkIjogWyAid2ViOmNvbW11bml0eSIgXSwgImV4cCI6IDE3NTAwNjkxMzMsICJuYmYiOiAxNzQxMzQxNTQ1LCAiaWF0IjogMTc0OTk4MTU0NSwgImp0aSI6ICIwMDBCXzI2NzNCMkZCXzNCRDJEIiwgIm9hdCI6IDE3NDkyMzQxNTQsICJydF9leHAiOiAxNzUxODQ5MjcwLCAicGVyIjogMCwgImlwX3N1YmplY3QiOiAiMTA4LjM1LjIwMS4yMjgiLCAiaXBfY29uZmlybWVyIjogIjEwOC4zNS4yMDEuMjI4IiB9.x-XaTmJlyVmo2gDFU6x8oTt9EZ_NIkH5cehsN6CBMjgpd4DabjQjIOxqf3ZxqRZ3WYVwOG9eFAyQFXP6lkHiCA'
         }
 
     def init_database(self):
@@ -315,45 +333,121 @@ class SteamMarketCollector:
             conn.commit()
             return cursor.lastrowid
 
-    def store_price_history(self, item_id, price_data):
-        """Store price history data in database, avoiding duplicates"""
-        if not price_data or 'prices' not in price_data:
-            return
-
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            entries_added = 0
-            for entry in price_data['prices']:
-                try:
-                    cursor.execute('''
-                        INSERT OR IGNORE INTO price_history (item_id, timestamp, price, volume)
-                        VALUES (?, ?, ?, ?)
-                    ''', (item_id, entry[0], entry[1], entry[2]))
-                    if cursor.rowcount > 0:
-                        entries_added += 1
-                except sqlite3.Error as e:
-                    logging.error(f"Error storing price history entry: {str(e)}")
-                    continue
+    def validate_price_history(self, price_history):
+        """Validate price history data before storage"""
+        if not price_history or 'prices' not in price_history:
+            return False
             
-            conn.commit()
-            logging.info(f"[{threading.current_thread().name}] Stored {entries_added} new price history entries in database")
+        prices = price_history['prices']
+        if len(prices) < self.min_price_history_entries:
+            return False
+            
+        # Check for price anomalies
+        try:
+            # Steam API returns price history as [timestamp, price, volume]
+            price_values = [float(entry[1]) for entry in prices]  # Price is at index 1
+            avg_price = sum(price_values) / len(price_values)
+            max_deviation = max(abs(p - avg_price) / avg_price for p in price_values)
+            
+            if max_deviation > self.max_price_deviation:
+                logging.warning(f"Price history contains anomalous prices (max deviation: {max_deviation:.2%})")
+                return False
+                
+            return True
+        except (ValueError, IndexError) as e:
+            logging.error(f"Error validating price history: {str(e)}")
+            return False
+
+    def store_price_history(self, item_id, price_history):
+        """Store price history with validation"""
+        if not self.validate_price_history(price_history):
+            logging.warning(f"Skipping invalid price history for item_id {item_id}")
+            return False
+            
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                for entry in price_history['prices']:
+                    # Steam API returns price history as [timestamp, price, volume]
+                    timestamp, price, volume = entry
+                    cursor.execute('''
+                        INSERT INTO price_history (item_id, price, volume, timestamp)
+                        VALUES (?, ?, ?, ?)
+                    ''', (
+                        item_id,
+                        float(price),
+                        int(volume),
+                        int(timestamp)
+                    ))
+                conn.commit()
+                return True
+        except Exception as e:
+            logging.error(f"Error storing price history: {str(e)}")
+            return False
 
     def calculate_dynamic_sleep(self, thread_name):
         """Calculate dynamic sleep time based on rate limit status"""
-        base_sleep = self.worker_sleep_times.get(thread_name, 5)
-        requests_in_window = self.rate_limiters[game_id]['minute'].get_requests_in_window()
+        base_sleep = 5  # Default base_sleep
+        
+        # Get the maximum requests in window across all games
+        max_requests = 0
+        for game_id in self.games:
+            requests_in_window = self.rate_limiters[game_id]['minute'].get_requests_in_window()
+            max_requests = max(max_requests, requests_in_window)
         
         # Increase sleep time if we're approaching the rate limit
-        if requests_in_window > 12:  # If we've used more than 80% of our rate limit
+        if max_requests > 12:  # If we've used more than 80% of our rate limit
             return base_sleep * 2.5
-        elif requests_in_window > 8:  # If we've used more than 50% of our rate limit
+        elif max_requests > 8:  # If we've used more than 50% of our rate limit
             return base_sleep * 2
-        elif requests_in_window > 4:  # If we've used more than 25% of our rate limit
+        elif max_requests > 4:  # If we've used more than 25% of our rate limit
             return base_sleep * 1.5
         
         # Add some random jitter to prevent synchronized requests
         jitter = random.uniform(-1, 1)
         return max(2, base_sleep + jitter)
+
+    def add_to_queue(self, game_id, market_hash_name, priority=0):
+        """Add an item to the game-specific queue with priority"""
+        with self.game_queue_locks[game_id]:
+            self.game_queues[game_id].append((priority, market_hash_name))
+            logging.debug(f"Added {market_hash_name} to {self.games[game_id]} queue")
+
+    def get_next_item(self):
+        """Get the next item to process based on worker assignment"""
+        thread_name = threading.current_thread().name
+        worker_num = int(thread_name.split('-')[1])  # Worker-1 -> 1, Worker-2 -> 2, etc.
+        
+        # Map worker number to game_id
+        game_ids = list(self.games.keys())
+        if 1 <= worker_num <= len(game_ids):
+            assigned_game = game_ids[worker_num - 1]
+            with self.game_queue_locks[assigned_game]:
+                if self.game_queues[assigned_game]:
+                    priority, market_hash_name = self.game_queues[assigned_game].pop(0)
+                    return priority, (assigned_game, market_hash_name)
+        
+        return None, None
+
+    def fetch_batch_for_game(self, game_id):
+        """Fetch a single page (10 items) for a specific game"""
+        if not self.check_rate_limit(game_id):
+            logging.warning(f"Rate limit reached for {self.games[game_id]}, skipping page")
+            return []
+            
+        items_fetched = []
+        try:
+            listings = self.fetch_market_listings(game_id)
+            for item in listings[:self.page_size]:  # Only take page_size items
+                if 'hash_name' in item:
+                    market_hash_name = item['hash_name']
+                    priority = self.get_item_freshness(market_hash_name, game_id)
+                    self.add_to_queue(game_id, market_hash_name, priority)
+                    items_fetched.append(market_hash_name)
+        except Exception as e:
+            logging.error(f"Error fetching page for {self.games[game_id]}: {str(e)}")
+            
+        return items_fetched
 
     def worker(self):
         """Worker thread that processes items from the queue"""
@@ -362,13 +456,22 @@ class SteamMarketCollector:
         
         while not self.stop_event.is_set():
             try:
-                # Use a shorter timeout to be more responsive to stop events
-                priority, item = self.item_queue.get(timeout=0.1)
+                # Get next item using round-robin
+                priority, item = self.get_next_item()
                 if item is None:
+                    time.sleep(1)  # Sleep briefly if no items available
                     continue
 
                 game_id, market_hash_name = item
                 logging.info(f"[{thread_name}] Processing item: {market_hash_name} (Game: {self.games[game_id]}, Priority: {'NEW' if priority == ItemPriority.NEW_ITEM else 'OLD'})")
+                
+                # Check if this item has failed before
+                with self.failed_items_lock:
+                    if game_id in self.failed_items and market_hash_name in self.failed_items[game_id]:
+                        retry_count = self.failed_items[game_id][market_hash_name]
+                        if retry_count >= self.max_retries:
+                            logging.warning(f"[{thread_name}] Skipping {market_hash_name} after {retry_count} failed attempts")
+                            continue
                 
                 # Implement exponential backoff for rate limits
                 max_retries = 3
@@ -379,32 +482,73 @@ class SteamMarketCollector:
                         price_history = self.fetch_price_history(game_id, market_hash_name)
                         if price_history:
                             item_id = self.store_item(market_hash_name, game_id)
-                            self.store_price_history(item_id, price_history)
-                            self.update_item_freshness(market_hash_name, game_id, is_new=False)
-                            logging.info(f"[{thread_name}] Successfully processed {market_hash_name} for game {game_id}")
+                            if price_history.get('prices'):
+                                if self.store_price_history(item_id, price_history):
+                                    self.update_item_freshness(market_hash_name, game_id, is_new=False)
+                                    # Clear failed status if successful
+                                    with self.failed_items_lock:
+                                        if game_id in self.failed_items:
+                                            self.failed_items[game_id].pop(market_hash_name, None)
+                                    logging.info(f"[{thread_name}] Successfully processed {market_hash_name} for game {game_id} with {len(price_history['prices'])} price entries")
+                                else:
+                                    self.record_failed_item(game_id, market_hash_name)
+                            else:
+                                logging.warning(f"[{thread_name}] No price history data found for {market_hash_name}")
+                                self.record_failed_item(game_id, market_hash_name)
                             break
+                        else:
+                            logging.warning(f"[{thread_name}] Failed to fetch price history for {market_hash_name}")
+                            self.record_failed_item(game_id, market_hash_name)
                     else:
                         if attempt < max_retries - 1:
                             time.sleep(retry_delay)
                             retry_delay *= 2  # Exponential backoff
-                
-                self.item_queue.task_done()
                 
                 # Dynamic sleep based on rate limit status
                 sleep_time = self.calculate_dynamic_sleep(thread_name)
                 logging.debug(f"[{thread_name}] Sleeping for {sleep_time:.2f} seconds")
                 time.sleep(sleep_time)
                 
-            except Empty:
-                continue
             except Exception as e:
                 logging.error(f"[{thread_name}] Error in worker thread: {str(e)}")
         
         logging.info(f"[{thread_name}] Worker thread stopping")
 
-    def start_collection(self, num_workers=2):  # Changed default to 2 workers
-        """Start the collection process with multiple worker threads"""
-        logging.info(f"Starting collection with {num_workers} worker threads")
+    def record_failed_item(self, game_id, market_hash_name):
+        """Record a failed item for retry"""
+        with self.failed_items_lock:
+            if game_id not in self.failed_items:
+                self.failed_items[game_id] = {}
+            self.failed_items[game_id][market_hash_name] = self.failed_items[game_id].get(market_hash_name, 0) + 1
+
+    def get_queue_sizes(self):
+        """Get the current size of all game queues"""
+        sizes = {}
+        for game_id in self.games:
+            with self.game_queue_locks[game_id]:
+                sizes[game_id] = len(self.game_queues[game_id])
+        return sizes
+
+    def should_pause_fetching(self):
+        """Check if we should pause fetching to let workers catch up"""
+        queue_sizes = self.get_queue_sizes()
+        max_queue_size = max(queue_sizes.values())
+        min_queue_size = min(queue_sizes.values())
+        
+        # Log queue sizes and failed items
+        with self.failed_items_lock:
+            failed_counts = {game_id: len(items) for game_id, items in self.failed_items.items()}
+        logging.info(f"Current queue sizes: {queue_sizes}, Failed items: {failed_counts}")
+        
+        # Pause if queue sizes are too imbalanced
+        queue_imbalance = max_queue_size - min_queue_size
+        return queue_imbalance > self.page_size
+
+    def start_collection(self):
+        """Start the collection process with one worker per game"""
+        num_workers = len(self.games)
+        logging.info(f"Starting collection with {num_workers} worker threads (one per game)")
+        logging.info(f"Batch configuration: {self.total_batch_size} total items, {self.items_per_game} per game, {self.pages_per_game} pages per game")
         
         # Load existing items from database
         self.load_existing_items()
@@ -416,33 +560,52 @@ class SteamMarketCollector:
             thread.daemon = True
             thread.start()
             threads.append(thread)
-            logging.info(f"Started worker thread: {thread.name}")
+            logging.info(f"Started worker thread: {thread.name} for {self.games[list(self.games.keys())[i]]}")
 
         # Main collection loop
         try:
             while not self.stop_event.is_set():
-                for game_id in self.games:
-                    logging.info(f"Starting collection cycle for game {game_id} ({self.games[game_id]})")
-                    
-                    # Check rate limit before fetching listings
-                    if self.check_rate_limit(game_id):
-                        listings = self.fetch_market_listings(game_id)
-                        for item in listings:
-                            if 'hash_name' in item:
-                                market_hash_name = item['hash_name']
-                                priority = self.get_item_freshness(market_hash_name, game_id)
-                                self.item_queue.put((priority, (game_id, market_hash_name)))
+                # Check if we should pause fetching
+                if self.should_pause_fetching():
+                    logging.info("Queue sizes imbalanced, pausing to let workers catch up")
+                    time.sleep(30)
+                    continue
+                
+                # Track pages fetched per game
+                pages_per_game = {game_id: 0 for game_id in self.games}
+                total_pages_fetched = 0
+                
+                # Fetch complete batch (100 items total)
+                while total_pages_fetched < self.pages_per_game * len(self.games):
+                    # Check if any game has reached its page limit
+                    if all(pages_per_game[game_id] >= self.pages_per_game for game_id in self.games):
+                        break
                         
-                        logging.info(f"Added {len(listings)} items to queue for game {game_id}")
-                    else:
-                        logging.warning(f"Rate limit reached, skipping collection cycle for game {game_id}")
+                    for game_id in self.games:
+                        # Skip if we've fetched enough pages for this game
+                        if pages_per_game[game_id] >= self.pages_per_game:
+                            continue
+                            
+                        items_fetched = self.fetch_batch_for_game(game_id)
+                        pages_per_game[game_id] += 1
+                        total_pages_fetched += 1
+                        
+                        logging.info(f"Fetched page {pages_per_game[game_id]}/{self.pages_per_game} for {self.games[game_id]}: {len(items_fetched)} items")
+                        logging.info(f"Current queue sizes: {self.get_queue_sizes()}, Failed items: {self.failed_items}")
+                        
+                        # Check rate limits after each page
+                        if self.should_pause_fetching():
+                            logging.info("Rate limit or queue imbalance detected, pausing")
+                            time.sleep(30)
+                            break
                 
-                # Wait for queue to be processed
-                self.item_queue.join()
-                logging.info("Queue processed, waiting 5 minutes before next cycle")
+                # Wait for workers to process the batch
+                while any(len(queue) > 0 for queue in self.game_queues.values()):
+                    time.sleep(5)
                 
-                # Sleep for 5 minutes before next collection cycle
+                logging.info("Batch complete, waiting 5 minutes before next batch")
                 time.sleep(300)
+                
         except KeyboardInterrupt:
             logging.info("Stopping collection...")
             self.stop_event.set()
@@ -451,56 +614,6 @@ class SteamMarketCollector:
             for thread in threads:
                 thread.join()
                 logging.info(f"Worker thread {thread.name} stopped")
-
-    def collect_market_items(self):
-        """Collect market items for all supported games"""
-        while not self.stop_event.is_set():
-            try:
-                # Alternate between games
-                for game_id, game_name in self.games.items():
-                    logging.info(f"Starting collection cycle for game {game_id} ({game_name})")
-                    
-                    # Fetch items for current game
-                    items = self.fetch_market_listings(game_id)
-                    
-                    if items:
-                        for item in items:
-                            market_hash_name = item.get('hash_name')
-                            if market_hash_name:
-                                # Add to queue with high priority for new items
-                                self.add_to_queue(game_id, market_hash_name, priority=1)
-                                logging.info(f"Added item to queue: {market_hash_name} (Game: {game_name})")
-                    
-                    logging.info(f"Added {len(items)} items to queue for game {game_id}")
-                    
-                    # Add delay between games to avoid rate limiting
-                    time.sleep(random.uniform(5, 8))
-                
-                # Wait for queue to be processed
-                self.item_queue.join()
-                logging.info("Queue processed, waiting 5 minutes before next cycle")
-                time.sleep(300)  # Wait 5 minutes before next cycle
-                
-            except Exception as e:
-                logging.error(f"Error in collect_market_items: {str(e)}")
-                time.sleep(60)  # Wait a minute before retrying on error
-
-    def add_to_queue(self, game_id, market_hash_name, priority=0):
-        """Add an item to the queue with priority"""
-        with self.freshness_lock:
-            current_time = time.time()
-            last_update = self.item_freshness.get(market_hash_name, 0)
-            
-            # Calculate priority based on freshness
-            if current_time - last_update > 3600:  # More than 1 hour old
-                priority = 1
-            elif current_time - last_update > 1800:  # More than 30 minutes old
-                priority = 2
-            else:
-                priority = 3
-            
-            self.item_queue.put((priority, current_time, (game_id, market_hash_name)))
-            self.item_freshness[market_hash_name] = current_time
 
 if __name__ == "__main__":
     collector = SteamMarketCollector()
