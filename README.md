@@ -3,6 +3,11 @@
 ## Overview
 The Steam Market History Collector is a Python script designed to collect and store price history data for items in the Steam Community Market. It supports multiple games and implements rate limiting, data validation, and efficient batch processing.
 
+## Use
+Download files
+app.py -> Update STEAMAPIS_KEY and steamLoginSecure variables with your personal values (if you want to see price history data)
+run python app.py
+
 ## Goals
 1. **Data Collection**
    - Collect market listings and price history for Steam market items
