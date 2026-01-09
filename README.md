@@ -8,6 +8,10 @@ Download files
 app.py -> Update STEAMAPIS_KEY and steamLoginSecure variables with your personal values (if you want to see price history data)
 run python app.py
 
+
+<img width="1918" height="993" alt="image" src="https://github.com/user-attachments/assets/feac2b6f-99b4-4129-a612-e8c11950aca6" />
+
+
 ## Goals
 1. **Data Collection**
    - Collect market listings and price history for Steam market items
