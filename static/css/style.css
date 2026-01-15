@@ -1,3 +1,16 @@
+/* Base styles - Light theme */
+html {
+    background-color: #ffffff;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: #ffffff;
+    margin: 0;
+    padding: 0;
+}
+
 .batch-separator {
     background-color: #f8f9fa;
 }
@@ -10,4 +23,355 @@
 .batch-separator small {
     color: #6c757d;
     font-size: 0.875rem;
-} 
+}
+
+.market-item {
+    transition: background-color 0.2s;
+}
+
+.market-item:hover {
+    background-color: #f8f9fa;
+}
+
+.search-container {
+    margin-bottom: 20px;
+}
+
+.settings-section {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.form-label {
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.help-text {
+    font-size: 0.875rem;
+    color: #6c757d;
+    margin-top: 4px;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.status-configured {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.status-not-configured {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+/* Item images - 25% smaller (75% of original size) */
+.item-image {
+    width: 75%;
+    height: auto;
+}
+
+/* Make all item images in market listings 25% smaller */
+.market-item img,
+.table img[src*="steamcommunity"],
+.table img.item-image {
+    width: 30px !important;
+    height: auto !important;
+    max-width: 30px;
+}
+
+/* Dark mode styles */
+html.dark-mode {
+    background-color: #0d1117;
+}
+
+body.dark-mode {
+    background-color: #0d1117;
+    color: #c9d1d9;
+}
+
+body.dark-mode .container {
+    background-color: #161b22;
+    border-radius: 12px;
+    padding: 2rem;
+    margin-top: 2rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+body.dark-mode h1, 
+body.dark-mode h2, 
+body.dark-mode h3, 
+body.dark-mode h4, 
+body.dark-mode h5, 
+body.dark-mode h6 {
+    color: #c9d1d9;
+}
+
+body.dark-mode .card {
+    background-color: #1c2128;
+    border: 1px solid #30363d;
+    color: #c9d1d9;
+}
+
+body.dark-mode .card-header {
+    background-color: #21262d;
+    border-bottom: 1px solid #30363d;
+    color: #c9d1d9;
+}
+
+body.dark-mode .table {
+    color: #c9d1d9;
+}
+
+body.dark-mode .table thead th {
+    background-color: #21262d;
+    border-bottom: 2px solid #30363d;
+    color: #c9d1d9;
+}
+
+body.dark-mode .table tbody tr {
+    background-color: #1c2128;
+    border-bottom: 1px solid #30363d;
+}
+
+body.dark-mode .table tbody tr:hover {
+    background-color: #30363d;
+}
+
+body.dark-mode .table tbody td {
+    background-color: #1c2128;
+    border-color: #30363d;
+    color: #c9d1d9;
+}
+
+body.dark-mode .table tbody tr:hover td {
+    background-color: #30363d;
+    color: #c9d1d9;
+}
+
+/* Ensure table cells match row backgrounds */
+body.dark-mode .table tbody tr:nth-child(even) td {
+    background-color: #161b22;
+}
+
+body.dark-mode .table tbody tr:nth-child(odd) td {
+    background-color: #1c2128;
+}
+
+body.dark-mode .table tbody tr:nth-child(even):hover td {
+    background-color: #30363d;
+}
+
+body.dark-mode .table tbody tr:nth-child(odd):hover td {
+    background-color: #30363d;
+}
+
+body.dark-mode .market-item {
+    background-color: #1c2128;
+    border: 1px solid #30363d;
+}
+
+body.dark-mode .market-item:hover {
+    background-color: #30363d;
+    border-color: #58a6ff;
+}
+
+body.dark-mode .btn-primary {
+    background: linear-gradient(135deg, #58a6ff 0%, #79c0ff 100%);
+    color: white;
+}
+
+body.dark-mode .btn-primary:hover {
+    background: linear-gradient(135deg, #79c0ff 0%, #58a6ff 100%);
+}
+
+body.dark-mode .btn-primary:disabled {
+    background: #21262d;
+    color: #8b949e;
+    opacity: 0.6;
+}
+
+body.dark-mode .btn-outline-primary {
+    border: 1px solid #58a6ff;
+    color: #58a6ff;
+    background-color: transparent;
+}
+
+body.dark-mode .btn-outline-primary:hover {
+    background-color: #58a6ff;
+    color: white;
+}
+
+body.dark-mode .btn-outline-secondary {
+    border: 1px solid #30363d;
+    color: #8b949e;
+    background-color: transparent;
+}
+
+body.dark-mode .btn-outline-secondary:hover {
+    background-color: #30363d;
+    border-color: #30363d;
+    color: #c9d1d9;
+}
+
+body.dark-mode .form-control, 
+body.dark-mode .form-select {
+    background-color: #21262d;
+    border: 1px solid #30363d;
+    color: #c9d1d9;
+}
+
+body.dark-mode .form-control:focus, 
+body.dark-mode .form-select:focus {
+    background-color: #21262d;
+    border-color: #58a6ff;
+    color: #c9d1d9;
+    box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1);
+}
+
+body.dark-mode .form-control::placeholder {
+    color: #6e7681;
+}
+
+body.dark-mode .form-label {
+    color: #c9d1d9;
+}
+
+body.dark-mode .alert-info {
+    background-color: rgba(88, 166, 255, 0.15);
+    color: #58a6ff;
+    border-left: 4px solid #58a6ff;
+}
+
+body.dark-mode .alert-success {
+    background-color: rgba(63, 185, 80, 0.15);
+    color: #3fb950;
+    border-left: 4px solid #3fb950;
+}
+
+body.dark-mode .alert-danger {
+    background-color: rgba(248, 81, 73, 0.15);
+    color: #f85149;
+    border-left: 4px solid #f85149;
+}
+
+body.dark-mode .alert-warning {
+    background-color: rgba(210, 153, 34, 0.15);
+    color: #d29922;
+    border-left: 4px solid #d29922;
+}
+
+body.dark-mode .modal-content {
+    background-color: #1c2128;
+    border: 1px solid #30363d;
+    color: #c9d1d9;
+}
+
+body.dark-mode .modal-header {
+    background-color: #21262d;
+    border-bottom: 1px solid #30363d;
+    color: #c9d1d9;
+}
+
+body.dark-mode .modal-body {
+    background-color: #1c2128;
+    color: #c9d1d9;
+}
+
+body.dark-mode .modal-footer {
+    background-color: #21262d;
+    border-top: 1px solid #30363d;
+}
+
+body.dark-mode .btn-close {
+    filter: invert(1);
+}
+
+body.dark-mode .navbar {
+    background-color: #161b22 !important;
+    border-bottom: 1px solid #30363d;
+}
+
+body.dark-mode .navbar-brand, 
+body.dark-mode .nav-link {
+    color: #c9d1d9 !important;
+}
+
+body.dark-mode .nav-link:hover {
+    color: #58a6ff !important;
+}
+
+body.dark-mode .chart-container {
+    background-color: #21262d;
+    border-radius: 8px;
+    padding: 1rem;
+    border: 1px solid #30363d;
+}
+
+body.dark-mode #priceHistorySection {
+    background-color: #21262d;
+    padding: 2rem;
+    border-radius: 12px;
+    border: 1px solid #30363d;
+}
+
+body.dark-mode .settings-section {
+    background-color: #1c2128;
+    border: 1px solid #30363d;
+}
+
+body.dark-mode .status-configured {
+    background-color: rgba(63, 185, 80, 0.2);
+    color: #3fb950;
+    border: 1px solid #3fb950;
+}
+
+body.dark-mode .status-not-configured {
+    background-color: rgba(248, 81, 73, 0.2);
+    color: #f85149;
+    border: 1px solid #f85149;
+}
+
+body.dark-mode code {
+    background-color: #21262d;
+    color: #58a6ff;
+    padding: 0.2em 0.4em;
+    border-radius: 4px;
+}
+
+body.dark-mode a {
+    color: #58a6ff;
+}
+
+body.dark-mode a:hover {
+    color: #79c0ff;
+}
+
+body.dark-mode .text-muted {
+    color: #6e7681 !important;
+}
+
+body.dark-mode .text-secondary {
+    color: #8b949e !important;
+}
+
+body.dark-mode ::-webkit-scrollbar-track {
+    background: #161b22;
+}
+
+body.dark-mode ::-webkit-scrollbar-thumb {
+    background: #30363d;
+}
+
+body.dark-mode ::-webkit-scrollbar-thumb:hover {
+    background: #21262d;
+}

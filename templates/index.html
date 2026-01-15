@@ -1,37 +1,39 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" {% if session.get('dark_mode') %}class="dark-mode"{% endif %}>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MapleStory Steam Market Listings</title>
+    <title>{{ games[selected_game] }} Steam Market Listings</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        .market-item {
-            transition: background-color 0.2s;
-        }
-        .market-item:hover {
-            background-color: #f8f9fa;
-        }
-        .search-container {
-            margin-bottom: 20px;
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body>
+<body {% if session.get('dark_mode') %}class="dark-mode"{% endif %}>
     <div class="container mt-5">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1>MapleStory Steam Market Listings</h1>
-            <a href="{{ url_for('view_cart') }}" class="btn btn-outline-primary position-relative">
-                <i class="bi bi-cart"></i> Cart
-                <span id="cartCount" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
-                    {{ session.get('cart', [])|length }}
-                </span>
-            </a>
+            <h1>{{ games[selected_game] }} Steam Market Listings</h1>
+            <div>
+                <a href="{{ url_for('settings') }}" class="btn btn-outline-secondary me-2">
+                    <i class="bi bi-gear"></i> Settings
+                </a>
+                <a href="{{ url_for('view_cart') }}" class="btn btn-outline-primary position-relative">
+                    <i class="bi bi-cart"></i> Cart
+                    <span id="cartCount" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                        {{ session.get('cart', [])|length }}
+                    </span>
+                </a>
+            </div>
         </div>
         
         <!-- Add search form -->
         <form method="get" class="search-container">
             <div class="row g-3 align-items-center">
+                <div class="col-auto">
+                    <select name="game" class="form-select" onchange="this.form.submit()">
+                        {% for game_id, game_name in games.items() %}
+                            <option value="{{ game_id }}" {% if game_id == selected_game %}selected{% endif %}>{{ game_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
                 <div class="col-auto">
                     <input type="text" class="form-control" name="search" placeholder="Search items..." value="{{ search_query }}">
                 </div>
@@ -41,6 +43,7 @@
                 {% if search_query %}
                 <div class="col-auto">
                     <a href="{{ url_for('index', 
+                        game=selected_game,
                         filter_sell_listings='on' if filter_sell_listings else 'off', 
                         filter_sell_price='on' if filter_sell_price else 'off', 
                         filter_sold_7_days='on' if filter_sold_7_days else 'off',
@@ -55,7 +58,7 @@
         <!-- Add this after the search form -->
         <div class="row g-3 align-items-center mb-3">
             <div class="col-auto">
-                <a href="{{ url_for('index') }}" class="btn btn-secondary">Reset All Filters</a>
+                <a href="{{ url_for('index', game=selected_game) }}" class="btn btn-secondary">Reset All Filters</a>
             </div>
         </div>
 
@@ -119,7 +122,6 @@
                                 Quantity
                             </a>
                         </th>
-                        <th>Image</th>
                         <th>Action</th>
                     </tr>
                 </thead>
@@ -135,28 +137,48 @@
                             <td>{{ item.price }}</td>
                             <td>{{ item.quantity }}</td>
                             <td>
-                                {% if item.image_url %}
-                                    <img src="{{ item.image_url }}" alt="{{ item.item_name }}" width="40">
-                                {% endif %}
-                            </td>
-                            <td>
                                 <button class="btn btn-sm btn-primary add-to-cart" 
                                         data-item='{{ {
                                     "item_name": item.item_name,
                                     "price": item.price,
                                     "price_value": item.price_value,
                                     "quantity": item.quantity,
-                                    "image_url": item.image_url,
                                     "market_hash_name": item.market_hash_name,
-                                    "market_id": item.market_id
-                                }|tojson }}'>
-                                    <i class="bi bi-cart-plus"></i> Add to Cart
+                                    "market_id": item.market_id,
+                                    "game_id": selected_game
+                                }|tojson }}'
+                                        {% if cart_item_names and item.item_name in cart_item_names %}disabled{% endif %}>
+                                    {% if cart_item_names and item.item_name in cart_item_names %}
+                                        <i class="bi bi-check"></i> In Cart
+                                    {% else %}
+                                        <i class="bi bi-cart-plus"></i> Add to Cart
+                                    {% endif %}
+                                </button>
+                                <button class="btn btn-sm btn-info view-price-history" 
+                                        data-market-hash-name="{{ item.market_hash_name }}"
+                                        data-app-id="{{ selected_game }}">
+                                    <i class="bi bi-graph-up"></i> Price History
                                 </button>
                             </td>
                         </tr>
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+
+        <!-- Price History Modal -->
+        <div class="modal fade" id="priceHistoryModal" tabindex="-1" aria-labelledby="priceHistoryModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="priceHistoryModalLabel">Price History</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <canvas id="priceHistoryChart"></canvas>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Pagination -->
@@ -184,8 +206,11 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            let priceHistoryChart = null;
+
             // Add to cart functionality
             document.querySelectorAll('.add-to-cart').forEach(button => {
                 button.addEventListener('click', function() {
@@ -197,7 +222,18 @@
                         },
                         body: JSON.stringify(itemData)
                     })
-                    .then(response => response.json())
+                    .then(response => {
+                        return response.json().then(data => {
+                            if (!response.ok) {
+                                // Check if it's the "already in cart" error
+                                if (data.error && data.error.includes('already in cart')) {
+                                    throw new Error('ALREADY_IN_CART');
+                                }
+                                throw new Error(data.error || 'Failed to add item to cart');
+                            }
+                            return data;
+                        });
+                    })
                     .then(data => {
                         if (data.message) {
                             // Update cart count
@@ -205,24 +241,246 @@
                             // Disable button
                             this.disabled = true;
                             this.innerHTML = '<i class="bi bi-check"></i> Added';
-                            
-                            // Verify the item was actually added
-                            if (!data.cart_items || !data.cart_items.some(item => item.item_name === itemData.item_name)) {
-                                console.error('Item not found in cart after adding');
-                                alert('There was an issue adding the item to your cart. Please try again.');
-                                this.disabled = false;
-                                this.innerHTML = '<i class="bi bi-cart-plus"></i> Add to Cart';
-                            }
                         } else if (data.error) {
                             alert(data.error);
+                            this.disabled = false;
+                            this.innerHTML = '<i class="bi bi-cart-plus"></i> Add to Cart';
                         }
                     })
                     .catch(error => {
                         console.error('Error:', error);
-                        alert('Failed to add item to cart');
-                        this.disabled = false;
-                        this.innerHTML = '<i class="bi bi-cart-plus"></i> Add to Cart';
+                        if (error.message === 'ALREADY_IN_CART') {
+                            alert('This item is already in your cart.');
+                            // Disable button since item is already in cart
+                            this.disabled = true;
+                            this.innerHTML = '<i class="bi bi-check"></i> In Cart';
+                        } else {
+                            alert(error.message || 'Failed to add item to cart');
+                            this.disabled = false;
+                            this.innerHTML = '<i class="bi bi-cart-plus"></i> Add to Cart';
+                        }
                     });
+                });
+            });
+
+            // Price History functionality
+            document.querySelectorAll('.view-price-history').forEach(button => {
+                button.addEventListener('click', function() {
+                    const marketHashName = this.dataset.marketHashName;
+                    const appId = this.dataset.appId;
+                    const modalBody = document.querySelector('#priceHistoryModal .modal-body');
+                    
+                    // Destroy existing chart if it exists
+                    if (priceHistoryChart) {
+                        priceHistoryChart.destroy();
+                        priceHistoryChart = null;
+                    }
+                    
+                    // Show loading state
+                    modalBody.innerHTML = `
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">Loading price history...</p>
+                        </div>
+                    `;
+                    
+                    const modal = new bootstrap.Modal(document.getElementById('priceHistoryModal'));
+                    modal.show();
+                    
+                    // Fetch price history
+                    fetch(`/api/pricehistory?appid=${appId}&market_hash_name=${encodeURIComponent(marketHashName)}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            const modalBody = document.querySelector('#priceHistoryModal .modal-body');
+                            
+                            if (data.error) {
+                                modalBody.innerHTML = `
+                                    <div class="alert alert-danger" role="alert">
+                                        <i class="bi bi-exclamation-triangle"></i> ${data.error}
+                                    </div>
+                                `;
+                                return;
+                            }
+
+                            // Check if prices array is empty
+                            const prices = data.prices || [];
+                            if (prices.length === 0) {
+                                // Check if there's an error message with suggestion
+                                if (data.error) {
+                                    let requirementsHtml = '';
+                                    if (data.account_requirements && data.account_requirements.length > 0) {
+                                        requirementsHtml = `
+                                            <div class="mt-2">
+                                                <strong>Steam Account Requirements:</strong>
+                                                <ul class="mb-0 mt-1">
+                                                    ${data.account_requirements.map(req => `<li>${req}</li>`).join('')}
+                                                </ul>
+                                            </div>
+                                        `;
+                                    }
+                                    modalBody.innerHTML = `
+                                        <div class="alert alert-warning" role="alert">
+                                            <h6><i class="bi bi-exclamation-triangle"></i> ${data.error}</h6>
+                                            ${data.suggestion ? `<p class="mb-0 mt-2"><strong>Suggestion:</strong> ${data.suggestion}</p>` : ''}
+                                            ${requirementsHtml}
+                                            <p class="mb-0 mt-2">
+                                                <a href="{{ url_for('settings') }}" class="btn btn-sm btn-primary me-2">
+                                                    <i class="bi bi-gear"></i> Go to Settings
+                                                </a>
+                                                <a href="https://store.steampowered.com/account/" target="_blank" class="btn btn-sm btn-outline-primary">
+                                                    <i class="bi bi-box-arrow-up-right"></i> Check Account Status
+                                                </a>
+                                            </p>
+                                        </div>
+                                    `;
+                                } else {
+                                    modalBody.innerHTML = `
+                                        <div class="alert alert-info" role="alert">
+                                            <i class="bi bi-info-circle"></i> No price history available for this item.
+                                        </div>
+                                    `;
+                                }
+                                return;
+                            }
+
+                            // Destroy existing chart if it exists
+                            if (priceHistoryChart) {
+                                priceHistoryChart.destroy();
+                            }
+
+                            // Restore canvas element if it was removed
+                            if (!document.getElementById('priceHistoryChart')) {
+                                modalBody.innerHTML = '<canvas id="priceHistoryChart"></canvas>';
+                            }
+
+                            // Filter to last 3 months for listing page
+                            const threeMonthsAgo = new Date();
+                            threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+                            
+                            // Helper function to parse Steam date string to Date object
+                            function parseSteamDate(dateStr) {
+                                try {
+                                    // Steam format: "MMM DD YYYY HH: +0"
+                                    // Remove timezone offset and parse
+                                    let cleanDateStr = dateStr.replace(/\s+\+\d+$/, ''); // Remove " +0"
+                                    cleanDateStr = cleanDateStr.trim();
+                                    
+                                    // Parse format: "Dec 06 2018 01:"
+                                    // Extract parts: Month Day Year Hour
+                                    const parts = cleanDateStr.match(/(\w+)\s+(\d+)\s+(\d+)\s+(\d+):/);
+                                    if (parts) {
+                                        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                                        const month = monthNames.indexOf(parts[1]);
+                                        const day = parseInt(parts[2]);
+                                        const year = parseInt(parts[3]);
+                                        const hour = parseInt(parts[4]);
+                                        
+                                        if (month !== -1) {
+                                            return new Date(year, month, day, hour);
+                                        }
+                                    }
+                                    
+                                    // Fallback: try direct Date parsing
+                                    const date = new Date(cleanDateStr);
+                                    if (!isNaN(date.getTime())) {
+                                        return date;
+                                    }
+                                    
+                                    return null;
+                                } catch (e) {
+                                    console.error('Date parsing error:', e, dateStr);
+                                    return null;
+                                }
+                            }
+                            
+                            // Filter prices to last 3 months
+                            const filteredPrices = prices.filter(p => {
+                                const date = parseSteamDate(p[0]);
+                                return date && date >= threeMonthsAgo;
+                            });
+                            
+                            // If no data in last 3 months, show message
+                            if (filteredPrices.length === 0) {
+                                modalBody.innerHTML = `
+                                    <div class="alert alert-info" role="alert">
+                                        <i class="bi bi-info-circle"></i> No price history available for the last 3 months. View full history in cart.
+                                    </div>
+                                `;
+                                return;
+                            }
+                            
+                            // Prepare data for chart (using filtered data)
+                            // Steam returns dates as strings like "Dec 06 2018 01: +0"
+                            // Parse the date string and convert to proper date format
+                            const labels = filteredPrices.map(p => {
+                                const date = parseSteamDate(p[0]);
+                                if (date) {
+                                    return date.toLocaleDateString('en-US', { 
+                                        year: 'numeric', 
+                                        month: 'short', 
+                                        day: 'numeric' 
+                                    });
+                                }
+                                return p[0]; // Fallback to original string
+                            });
+                            const values = filteredPrices.map(p => parseFloat(p[1]));
+
+                            // Create new chart
+                            const ctx = document.getElementById('priceHistoryChart').getContext('2d');
+                            priceHistoryChart = new Chart(ctx, {
+                                type: 'line',
+                                data: {
+                                    labels: labels,
+                                    datasets: [{
+                                        label: 'Price History (Last 3 Months)',
+                                        data: values,
+                                        borderColor: 'rgb(75, 192, 192)',
+                                        backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                                        tension: 0.1,
+                                        fill: true
+                                    }]
+                                },
+                                options: {
+                                    responsive: true,
+                                    maintainAspectRatio: true,
+                                    scales: {
+                                        y: {
+                                            beginAtZero: false,
+                                            title: {
+                                                display: true,
+                                                text: 'Price (USD)'
+                                            }
+                                        },
+                                        x: {
+                                            title: {
+                                                display: true,
+                                                text: 'Date'
+                                            }
+                                        }
+                                    },
+                                    plugins: {
+                                        legend: {
+                                            display: true
+                                        },
+                                        tooltip: {
+                                            mode: 'index',
+                                            intersect: false
+                                        }
+                                    }
+                                }
+                            });
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            const modalBody = document.querySelector('#priceHistoryModal .modal-body');
+                            modalBody.innerHTML = `
+                                <div class="alert alert-danger" role="alert">
+                                    <i class="bi bi-exclamation-triangle"></i> Failed to fetch price history: ${error.message}
+                                </div>
+                            `;
+                        });
                 });
             });
         });
