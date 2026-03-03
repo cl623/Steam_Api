@@ -53,7 +53,8 @@ class PricePredictor:
     
     def get_moving_averages_from_db(self, item_name, game_id, days=30):
         """
-        Calculate moving averages from database for a specific item.
+        Calculate moving averages and simple momentum features from database
+        for a specific item.
         
         Args:
             item_name: Market hash name of the item
@@ -61,7 +62,10 @@ class PricePredictor:
             days: Number of days of history to use (default: 30)
             
         Returns:
-            dict with keys: price_ma7, price_ma30, price_std7, volume_ma7, current_price, current_volume
+            dict with keys:
+                current_price, current_volume,
+                price_ma7, price_ma30, price_std7, volume_ma7,
+                ret_7, ret_30
             Returns None if insufficient data
         """
         with sqlite3.connect(self.db_path) as conn:
@@ -116,20 +120,41 @@ class PricePredictor:
             price_ma30 = float(price_df['price'].tail(window_30).mean()) if window_30 >= 7 else price_ma7
             price_std7 = float(price_df['price'].tail(window_7).std()) if window_7 > 1 else 0.0
             volume_ma7 = float(price_df['volume'].tail(window_7).mean())
-            
+
+            # Simple momentum features: percentage returns over 7 and 30 steps
+            price_df['ret_7'] = price_df['price'].pct_change(periods=min(7, len(price_df) - 1))
+            price_df['ret_30'] = price_df['price'].pct_change(periods=min(30, len(price_df) - 1))
+            ret_7 = float(price_df['ret_7'].iloc[-1]) if not pd.isna(price_df['ret_7'].iloc[-1]) else 0.0
+            ret_30 = float(price_df['ret_30'].iloc[-1]) if not pd.isna(price_df['ret_30'].iloc[-1]) else 0.0
+
             return {
                 'current_price': current_price,
                 'current_volume': current_volume,
                 'price_ma7': price_ma7,
                 'price_ma30': price_ma30,
                 'price_std7': price_std7,
-                'volume_ma7': volume_ma7
+                'volume_ma7': volume_ma7,
+                'ret_7': ret_7,
+                'ret_30': ret_30,
             }
         
-    def prepare_data(self, game_id, lookback_days=7, prediction_days=7, max_items=None, pause_check=None):
+    def prepare_data(
+        self,
+        game_id,
+        lookback_days=7,
+        prediction_days=7,
+        max_items=None,
+        pause_check=None,
+        from_date=None,
+        to_date=None,
+    ):
         """
         Prepare data for training by creating features from historical prices
         and item name parsing.
+        
+        The target is the future **percentage return** over `prediction_days`
+        rather than the absolute future price, i.e.:
+            (future_price - current_price) / current_price
         
         Args:
             game_id: Game ID to process
@@ -137,12 +162,25 @@ class PricePredictor:
             prediction_days: Number of days ahead to predict
             max_items: Maximum number of items to process (None for all items)
             pause_check: Optional callable that returns True if should pause (called after each item)
+            from_date: Optional lower bound on timestamp (inclusive), as
+                a string 'YYYY-MM-DD' or pandas.Timestamp
+            to_date: Optional upper bound on timestamp (inclusive), as
+                a string 'YYYY-MM-DD' or pandas.Timestamp
         
         Returns:
             X: Feature matrix (numpy array)
-            y: Target prices (numpy array)
+            y: Target returns (numpy array)
             item_names: List of item names for each sample
+            timestamps: List of timestamps (pd.Timestamp) for each sample
         """
+        # Normalize from/to dates if provided
+        from_ts = None
+        to_ts = None
+        if from_date is not None:
+            from_ts = pd.to_datetime(from_date).normalize()
+        if to_date is not None:
+            to_ts = pd.to_datetime(to_date).normalize()
+
         with sqlite3.connect(self.db_path) as conn:
             # Get items with sufficient price history data
             # First, get items that have at least (lookback_days + prediction_days) entries
@@ -157,6 +195,26 @@ class PricePredictor:
                 ORDER BY entry_count DESC
             '''
             items_df = pd.read_sql_query(items_query, conn, params=(game_id, min_entries))
+
+            # Optionally load CS2 event daily features for date-level context
+            event_features_df = None
+            try:
+                event_features_df = pd.read_sql_query(
+                    """
+                    SELECT
+                        date,
+                        num_events,
+                        has_event_today,
+                        is_major_today,
+                        max_stars_prev_7d,
+                        max_stars_prev_30d
+                    FROM cs2_event_daily
+                    """,
+                    conn,
+                    parse_dates=["date"],
+                )
+            except Exception as e:
+                logging.warning(f"Could not load cs2_event_daily from database: {e}")
             
             # Limit items if max_items is specified
             if max_items is not None and max_items > 0:
@@ -172,6 +230,7 @@ class PricePredictor:
             all_features = []
             all_targets = []
             item_names = []
+            timestamps = []
             
             items_processed = 0
             items_with_features = 0
@@ -203,9 +262,39 @@ class PricePredictor:
                 # Convert timestamp to datetime
                 price_df['timestamp'] = price_df['timestamp'].apply(self._parse_steam_timestamp)
                 price_df = price_df.dropna(subset=['timestamp'])
+
+                # Apply optional global time window filter (event-aware model window)
+                if from_ts is not None:
+                    price_df = price_df[price_df['timestamp'] >= from_ts]
+                if to_ts is not None:
+                    price_df = price_df[price_df['timestamp'] <= to_ts]
                 
                 if len(price_df) < lookback_days + prediction_days:
                     continue
+
+                # Attach daily CS2 event features by date (if available)
+                if event_features_df is not None and not event_features_df.empty:
+                    price_df['date'] = price_df['timestamp'].dt.normalize()
+                    price_df = price_df.merge(
+                        event_features_df,
+                        how='left',
+                        left_on='date',
+                        right_on='date',
+                    )
+                    for col in [
+                        'num_events',
+                        'has_event_today',
+                        'is_major_today',
+                        'max_stars_prev_7d',
+                        'max_stars_prev_30d',
+                    ]:
+                        price_df[col] = price_df[col].fillna(0.0)
+                else:
+                    price_df['num_events'] = 0.0
+                    price_df['has_event_today'] = 0.0
+                    price_df['is_major_today'] = 0.0
+                    price_df['max_stars_prev_7d'] = 0.0
+                    price_df['max_stars_prev_30d'] = 0.0
                 
                 # Create features using rolling windows
                 # Use smaller windows if we don't have enough data
@@ -214,17 +303,23 @@ class PricePredictor:
                 window_30 = min(30, available_days - 1) if available_days > 1 else 1
                 
                 price_df['price_ma7'] = price_df['price'].rolling(window=window_7).mean()
-                price_df['price_ma30'] = price_df['price'].rolling(window=min(window_30, window_7)).mean()
+                price_df['price_ma30'] = price_df['price'].rolling(window=window_30).mean()
                 price_df['price_std7'] = price_df['price'].rolling(window=window_7).std()
                 price_df['volume_ma7'] = price_df['volume'].rolling(window=window_7).mean()
-                
+
+                # Momentum features: percentage returns over 7 and 30 steps
+                price_df['ret_7'] = price_df['price'].pct_change(periods=min(7, available_days - 1))
+                price_df['ret_30'] = price_df['price'].pct_change(periods=min(30, available_days - 1))
+
                 # Fill NaN values in rolling averages with current value or 0
                 price_df['price_ma7'] = price_df['price_ma7'].fillna(price_df['price'])
                 price_df['price_ma30'] = price_df['price_ma30'].fillna(price_df['price'])
                 price_df['price_std7'] = price_df['price_std7'].fillna(0.0)
                 price_df['volume_ma7'] = price_df['volume_ma7'].fillna(price_df['volume'])
+                price_df['ret_7'] = price_df['ret_7'].fillna(0.0)
+                price_df['ret_30'] = price_df['ret_30'].fillna(0.0)
                 
-                # Create target (future price)
+                # Create target (future price) and timestamp-aligned view
                 price_df['future_price'] = price_df['price'].shift(-prediction_days)
                 
                 # Only drop rows where future_price is NaN (can't predict without target)
@@ -237,13 +332,22 @@ class PricePredictor:
                     
                     # Combine price/volume features with item name features
                     for _, row in price_df.iterrows():
-                        # Price/volume features
+                        # Price/volume and momentum/time/event features
                         price_features = [
                             row['price'],
                             row['price_ma7'],
                             row['price_ma30'],
                             row['price_std7'] if not pd.isna(row['price_std7']) else 0.0,
                             row['volume_ma7'],
+                            row['ret_7'],
+                            row['ret_30'],
+                            row['timestamp'].dayofweek,
+                            row['timestamp'].month,
+                            row['num_events'],
+                            row['has_event_today'],
+                            row['is_major_today'],
+                            row['max_stars_prev_7d'],
+                            row['max_stars_prev_30d'],
                         ]
                         
                         # Item name features (convert dict to list in consistent order)
@@ -269,20 +373,39 @@ class PricePredictor:
                         
                         # Combine all features
                         combined_features = price_features + item_feature_list
+
+                        # Guard against division by zero when computing returns
+                        current_price = row['price']
+                        if current_price is None or current_price == 0:
+                            continue
+                        future_price = row['future_price']
+                        target_return = (future_price - current_price) / current_price
+
                         all_features.append(combined_features)
-                        all_targets.append(row['future_price'])
+                        all_targets.append(target_return)
                         item_names.append(item['market_hash_name'])
+                        timestamps.append(row['timestamp'])
             
             logging.info(f"Processed {len(items_df)} items, extracted features from {items_with_features} items")
             
             if not all_features:
                 logging.warning(f"No features extracted for game {game_id}")
-                return None, None, None
+                return None, None, None, None
             
             logging.info(f"Extracted {len(all_features)} samples with {len(all_features[0])} features each")
-            return np.array(all_features), np.array(all_targets), item_names
+            return np.array(all_features), np.array(all_targets), item_names, np.array(timestamps)
     
-    def train_model(self, game_id, max_items=None, pause_check=None):
+    def train_model(
+        self,
+        game_id,
+        max_items=None,
+        pause_check=None,
+        from_date=None,
+        to_date=None,
+        use_event_window=False,
+        pre_event_days=14,
+        post_event_days=30,
+    ):
         """
         Train a Random Forest model for the specified game
         
@@ -290,29 +413,80 @@ class PricePredictor:
             game_id: Game ID to train for
             max_items: Maximum number of items to use (None for all items)
             pause_check: Optional callable that returns True if should pause
+            from_date: Optional lower bound on timestamp (inclusive) for training
+            to_date: Optional upper bound on timestamp (inclusive) for training
+            use_event_window: If True and from_date/to_date are not provided,
+                derive the window from cs2_events with pre/post buffers.
+            pre_event_days: Days before first event to include when
+                deriving the event window.
+            post_event_days: Days after last event to include when
+                deriving the event window.
         """
         mode_str = f"sample mode ({max_items} items)" if max_items else "full mode"
         logging.info(f"Training model for {game_id} in {mode_str}")
+
+        # Optionally derive training window from cs2_events (event-aware model)
+        if use_event_window and (from_date is None or to_date is None):
+            try:
+                with sqlite3.connect(self.db_path) as conn:
+                    events_df = pd.read_sql_query(
+                        "SELECT MIN(start_date) AS min_start, MAX(end_date) AS max_end FROM cs2_events",
+                        conn,
+                        parse_dates=["min_start", "max_end"],
+                    )
+                if not events_df.empty and pd.notna(events_df["min_start"].iloc[0]) and pd.notna(
+                    events_df["max_end"].iloc[0]
+                ):
+                    min_start = events_df["min_start"].iloc[0].normalize()
+                    max_end = events_df["max_end"].iloc[0].normalize()
+                    from_date = (min_start - pd.Timedelta(days=pre_event_days)).date().isoformat()
+                    to_date = (max_end + pd.Timedelta(days=post_event_days)).date().isoformat()
+                    logging.info(
+                        f"Derived event-aware training window from cs2_events: "
+                        f"{from_date} to {to_date} (pre={pre_event_days}d, post={post_event_days}d)"
+                    )
+                else:
+                    logging.warning("cs2_events table is empty or missing dates; falling back to full window")
+            except Exception as e:
+                logging.warning(f"Could not derive event window from cs2_events: {e}")
         
-        # Prepare data
-        X, y, item_names = self.prepare_data(game_id, max_items=max_items, pause_check=pause_check)
-        if X is None:
+        # Prepare data (features, percentage returns, metadata)
+        X, y, item_names, timestamps = self.prepare_data(
+            game_id,
+            max_items=max_items,
+            pause_check=pause_check,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        if X is None or timestamps is None:
             logging.error(f"No data available for {game_id}")
             return False
         
-        # Split data
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        # Ensure chronological order across all samples
+        sort_idx = np.argsort(timestamps)
+        X = X[sort_idx]
+        y = y[sort_idx]
+        timestamps = timestamps[sort_idx]
+
+        # Chronological train/test split: earliest 80% for training, latest 20% for testing
+        n_samples = len(X)
+        if n_samples < 10:
+            logging.warning(f"Very small dataset for {game_id} (n={n_samples}); skipping training")
+            return False
+        split_idx = int(n_samples * 0.8)
+        X_train, X_test = X[:split_idx], X[split_idx:]
+        y_train, y_test = y[:split_idx], y[split_idx:]
         
         # Scale features
         scaler = StandardScaler()
         X_train_scaled = scaler.fit_transform(X_train)
         X_test_scaled = scaler.transform(X_test)
         
-        # Train model
+        # Train model on percentage returns
         model = RandomForestRegressor(n_estimators=100, random_state=42)
         model.fit(X_train_scaled, y_train)
         
-        # Evaluate model
+        # Evaluate model (errors are on returns, not raw prices)
         y_pred = model.predict(X_test_scaled)
         mse = mean_squared_error(y_test, y_pred)
         rmse = np.sqrt(mse)
@@ -320,24 +494,54 @@ class PricePredictor:
         r2 = r2_score(y_test, y_pred)
         
         logging.info(f"Model performance for {game_id}:")
-        logging.info(f"  Mean Squared Error: {mse:.4f}")
-        logging.info(f"  Root Mean Squared Error: ${rmse:.4f}")
-        logging.info(f"  Mean Absolute Error: ${mae:.4f}")
+        logging.info(f"  Mean Squared Error (returns): {mse:.6f}")
+        logging.info(f"  Root Mean Squared Error (returns): {rmse:.6f}")
+        logging.info(f"  Mean Absolute Error (returns): {mae:.6f}")
         logging.info(f"  R2 Score: {r2:.4f}")
         
         # Feature importance
         feature_importance = model.feature_importances_
         logging.info(f"  Top 5 most important features:")
         feature_names = [
-            'price', 'price_ma7', 'price_ma30', 'price_std7', 'volume_ma7',
-            'type_weapon_skin', 'type_sticker', 'type_case', 'type_agent', 'type_gloves',
-            'type_knife', 'type_other', 'is_weapon_skin', 'condition_quality',
-            'is_stattrak', 'is_souvenir', 'has_sticker', 'is_case', 'is_sticker',
-            'is_agent', 'is_gloves', 'is_knife'
+            'price',
+            'price_ma7',
+            'price_ma30',
+            'price_std7',
+            'volume_ma7',
+            'ret_7',
+            'ret_30',
+            'day_of_week',
+            'month',
+            'num_events',
+            'has_event_today',
+            'is_major_today',
+            'max_stars_prev_7d',
+            'max_stars_prev_30d',
+            'type_weapon_skin',
+            'type_sticker',
+            'type_case',
+            'type_agent',
+            'type_gloves',
+            'type_knife',
+            'type_other',
+            'is_weapon_skin',
+            'condition_quality',
+            'is_stattrak',
+            'is_souvenir',
+            'has_sticker',
+            'is_case',
+            'is_sticker',
+            'is_agent',
+            'is_gloves',
+            'is_knife',
         ]
         top_indices = np.argsort(feature_importance)[-5:][::-1]
         for idx in top_indices:
-            logging.info(f"    {feature_names[idx]}: {feature_importance[idx]:.4f}")
+            # Guard against mismatch between feature_names and model.n_features_in_
+            if idx < len(feature_names):
+                logging.info(f"    {feature_names[idx]}: {feature_importance[idx]:.4f}")
+            else:
+                logging.info(f"    feature_{idx}: {feature_importance[idx]:.4f}")
         
         # Save model and scaler
         self.models[game_id] = model
@@ -350,6 +554,10 @@ class PricePredictor:
                      auto_calculate_ma=True):
         """
         Predict future price for a specific item.
+        
+        The underlying model predicts a future **percentage return** over the
+        training horizon (e.g., 7 days), and this method converts that return
+        back into a future price using the provided/current price.
         
         IMPROVED: Now automatically calculates moving averages from database if not provided.
         
@@ -365,12 +573,43 @@ class PricePredictor:
             auto_calculate_ma: If True, automatically fetch and calculate MAs from database (default: True)
         
         Returns:
-            Predicted price, or None if prediction fails
+            Predicted future price, or None if prediction fails
         """
         if game_id not in self.models:
             if not self.train_model(game_id):
                 return None
-        
+
+        # Event-level CS2 features for the current date (joined later into price_features)
+        event_num_events = 0.0
+        event_has_event_today = 0.0
+        event_is_major_today = 0.0
+        event_max_stars_prev_7d = 0.0
+        event_max_stars_prev_30d = 0.0
+        try:
+            # Use current UTC date normalized to midnight to align with cs2_event_daily.date
+            current_date = pd.Timestamp.utcnow().normalize().date().isoformat()
+            with sqlite3.connect(self.db_path) as conn:
+                query = """
+                    SELECT
+                        num_events,
+                        has_event_today,
+                        is_major_today,
+                        max_stars_prev_7d,
+                        max_stars_prev_30d
+                    FROM cs2_event_daily
+                    WHERE date = ?
+                    LIMIT 1
+                """
+                event_df = pd.read_sql_query(query, conn, params=(current_date,))
+                if not event_df.empty:
+                    event_num_events = float(event_df['num_events'].iloc[0] or 0.0)
+                    event_has_event_today = float(event_df['has_event_today'].iloc[0] or 0.0)
+                    event_is_major_today = float(event_df['is_major_today'].iloc[0] or 0.0)
+                    event_max_stars_prev_7d = float(event_df['max_stars_prev_7d'].iloc[0] or 0.0)
+                    event_max_stars_prev_30d = float(event_df['max_stars_prev_30d'].iloc[0] or 0.0)
+        except Exception as e:
+            logging.warning(f"Could not load cs2_event_daily features: {e}")
+
         # Auto-calculate moving averages from database if enabled and not provided
         if auto_calculate_ma and (price_ma7 is None or price_ma30 is None):
             ma_data = self.get_moving_averages_from_db(item_name, game_id, days=30)
@@ -408,13 +647,22 @@ class PricePredictor:
         # Extract item name features
         item_features = self.feature_extractor.get_feature_vector(item_name)
         
-        # Price/volume features
+        # Price/volume, momentum, time, and event features
         price_features = [
             current_price,
             price_ma7,
             price_ma30,
             price_std7,
             volume_ma7,
+            ma_data['ret_7'] if auto_calculate_ma and 'ma_data' in locals() and ma_data else 0.0,
+            ma_data['ret_30'] if auto_calculate_ma and 'ma_data' in locals() and ma_data else 0.0,
+            pd.Timestamp.utcnow().dayofweek,
+            pd.Timestamp.utcnow().month,
+            event_num_events,
+            event_has_event_today,
+            event_is_major_today,
+            event_max_stars_prev_7d,
+            event_max_stars_prev_30d,
         ]
         
         # Item name features (same order as in prepare_data)
@@ -444,10 +692,17 @@ class PricePredictor:
         # Scale features
         features_scaled = self.scalers[game_id].transform(features)
         
-        # Make prediction
-        prediction = self.models[game_id].predict(features_scaled)[0]
+        # Make prediction (this is a predicted percentage return)
+        predicted_return = self.models[game_id].predict(features_scaled)[0]
+
+        # Convert return back to a future price
+        try:
+            future_price = current_price * (1.0 + predicted_return)
+        except TypeError:
+            logging.error("current_price must be numeric to compute future price")
+            return None
         
-        return prediction
+        return future_price
     
     def save_models(self, path='models'):
         """
@@ -483,24 +738,26 @@ class PricePredictor:
         return len(self.models) > 0
 
 def main():
-    # Initialize predictor
+    """
+    Simple CLI entry point for training and a quick backtest-style check.
+    """
     predictor = PricePredictor()
-    
-    # Train models for both games (using numeric IDs to match database)
-    for game_id in [
-        '730',  # Counter-Strike 2
-        # '216150',  # MapleStory - commented out, focusing on CS2
-    ]:
-        predictor.train_model(game_id)
-    
-    # Save models
+
+    # Train model for CS2 (730) using time-aware split and return target
+    game_id = '730'
+    if not predictor.train_model(game_id):
+        logging.error(f"Training failed for game {game_id}")
+        return
+
+    # Save model
     predictor.save_models()
-    
-    # Example prediction with auto-calculated MAs
-    if '730' in predictor.models:
-        # Simple usage - MAs auto-calculated from database
-        predicted_price = predictor.predict_price('730', 'Operation Breakout Weapon Case')
-        logging.info(f"Predicted price for Operation Breakout Weapon Case: ${predicted_price:.2f}")
+
+    # Example prediction with auto-calculated MAs for a popular case
+    if game_id in predictor.models:
+        item_name = 'Operation Breakout Weapon Case'
+        predicted_price = predictor.predict_price(game_id, item_name)
+        if predicted_price is not None:
+            logging.info(f"Predicted future price for {item_name}: ${predicted_price:.2f}")
 
 if __name__ == '__main__':
     main()
