@@ -151,58 +151,60 @@ def evaluate_model(
     plt.savefig(os.path.join(output_dir, f"hist_returns_true_vs_pred_{game_id}.png"))
     plt.close()
 
-    # 3. Top feature importances
-    importances = model.feature_importances_
-    # Reuse the feature_names from PricePredictor for consistency
-    base_feature_names = [
-        "price",
-        "price_ma7",
-        "price_ma30",
-        "price_std7",
-        "volume_ma7",
-        "ret_7",
-        "ret_30",
-        "day_of_week",
-        "month",
-        "num_events",
-        "has_event_today",
-        "is_major_today",
-        "max_stars_prev_7d",
-        "max_stars_prev_30d",
-        "type_weapon_skin",
-        "type_sticker",
-        "type_case",
-        "type_agent",
-        "type_gloves",
-        "type_knife",
-        "type_other",
-        "is_weapon_skin",
-        "condition_quality",
-        "is_stattrak",
-        "is_souvenir",
-        "has_sticker",
-        "is_case",
-        "is_sticker",
-        "is_agent",
-        "is_gloves",
-        "is_knife",
-    ]
-    feature_names = [
-        base_feature_names[i] if i < len(base_feature_names) else f"feature_{i}"
-        for i in range(len(importances))
-    ]
-    top_idx = np.argsort(importances)[-10:][::-1]
-    plt.figure(figsize=(8, 4))
-    plt.barh(
-        [feature_names[i] for i in top_idx],
-        [importances[i] for i in top_idx],
-    )
-    plt.gca().invert_yaxis()
-    plt.xlabel("Importance")
-    plt.title(f"Top 10 feature importances (game {game_id})")
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, f"feature_importances_top10_{game_id}.png"))
-    plt.close()
+    # 3. Top feature importances (if the model exposes them)
+    importances = getattr(model, "feature_importances_", None)
+    if importances is not None:
+        base_feature_names = [
+            "price",
+            "price_ma7",
+            "price_ma30",
+            "price_std7",
+            "volume_ma7",
+            "ret_7",
+            "ret_30",
+            "day_of_week",
+            "month",
+            "num_events",
+            "has_event_today",
+            "is_major_today",
+            "max_stars_prev_7d",
+            "max_stars_prev_30d",
+            "price_band",
+            "volume_band",
+            "type_weapon_skin",
+            "type_sticker",
+            "type_case",
+            "type_agent",
+            "type_gloves",
+            "type_knife",
+            "type_other",
+            "is_weapon_skin",
+            "condition_quality",
+            "is_stattrak",
+            "is_souvenir",
+            "has_sticker",
+            "is_case",
+            "is_sticker",
+            "is_agent",
+            "is_gloves",
+            "is_knife",
+        ]
+        feature_names = [
+            base_feature_names[i] if i < len(base_feature_names) else f"feature_{i}"
+            for i in range(len(importances))
+        ]
+        top_idx = np.argsort(importances)[-10:][::-1]
+        plt.figure(figsize=(8, 4))
+        plt.barh(
+            [feature_names[i] for i in top_idx],
+            [importances[i] for i in top_idx],
+        )
+        plt.gca().invert_yaxis()
+        plt.xlabel("Importance")
+        plt.title(f"Top 10 feature importances (game {game_id})")
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, f"feature_importances_top10_{game_id}.png"))
+        plt.close()
 
 
 def main() -> None:

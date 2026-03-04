@@ -5,12 +5,13 @@ import os
 import time
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor, HistGradientBoostingRegressor
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 import joblib
 from datetime import datetime, timedelta
 import logging
 from .feature_extractor import ItemFeatureExtractor
+from typing import Optional
 
 # Set up logging
 logging.basicConfig(
@@ -22,6 +23,10 @@ logging.basicConfig(
     ]
 )
 
+# Constants for return clipping and liquidity filtering
+MAX_ABS_RETURN = 3.0  # cap extreme percentage moves to [-300%, +300%]
+MIN_VOLUME_MA7 = 2.0  # skip very illiquid observations (average volume < 2 per day)
+
 class PricePredictor:
     def __init__(self, db_path=None):
         if db_path is None:
@@ -30,7 +35,78 @@ class PricePredictor:
         self.models = {}
         self.scalers = {}
         self.feature_extractor = ItemFeatureExtractor()
-    
+
+    def _get_price_band(self, price: float, item_type: Optional[str] = None) -> float:
+        """
+        Stratify items by price level, with type-specific bands.
+        Returns a small ordinal band as a float so it can be used as a feature.
+        """
+        if price is None or price <= 0:
+            return 0.0
+
+        # Default bands for generic items
+        if item_type is None:
+            item_type = "other"
+
+        # Weapon skins: large mass of ultra-cheap items with a long premium tail
+        if item_type == "weapon_skin":
+            if price < 0.10:
+                return 0.0  # ultra-cheap fillers
+            if price < 1.0:
+                return 1.0  # cheap play skins
+            if price < 10.0:
+                return 2.0  # mid-price
+            return 3.0      # expensive / premium skins
+
+        # Stickers: generally cheaper but with some high-end collectibles
+        if item_type == "sticker":
+            if price < 0.25:
+                return 0.0  # bulk / capsule fillers
+            if price < 2.0:
+                return 1.0  # common stickers
+            if price < 15.0:
+                return 2.0  # desirable but not ultra-rare
+            return 3.0      # high-end / legacy stickers
+
+        # Gloves: generally expensive items
+        if item_type == "gloves":
+            if price < 50.0:
+                return 1.0  # entry-level gloves
+            if price < 150.0:
+                return 2.0  # mid-tier
+            return 3.0      # premium gloves
+
+        # Knives: also generally expensive, with wide spread
+        if item_type == "knife":
+            if price < 100.0:
+                return 1.0  # cheaper knives
+            if price < 300.0:
+                return 2.0  # mid-tier knives
+            return 3.0      # iconic / very rare knives
+
+        # Fallback bands for other item types
+        if price < 0.25:
+            return 0.0
+        if price < 2.0:
+            return 1.0
+        if price < 20.0:
+            return 2.0
+        return 3.0
+
+    def _get_volume_band(self, volume: float) -> float:
+        """
+        Stratify items by liquidity level based on a volume measure (e.g., volume_ma7).
+        """
+        if volume is None or volume <= 0:
+            return 0.0
+        if volume < 5:
+            return 0.0  # very low volume (thin, emotional)
+        if volume < 50:
+            return 1.0  # low–medium
+        if volume < 500:
+            return 2.0  # active
+        return 3.0      # very high volume (pump-and-dump prone)
+
     def _parse_steam_timestamp(self, ts_str):
         """Parse Steam timestamp format to datetime"""
         try:
@@ -318,6 +394,9 @@ class PricePredictor:
                 price_df['volume_ma7'] = price_df['volume_ma7'].fillna(price_df['volume'])
                 price_df['ret_7'] = price_df['ret_7'].fillna(0.0)
                 price_df['ret_30'] = price_df['ret_30'].fillna(0.0)
+
+                # Filter out very illiquid observations (low average volume)
+                price_df = price_df[price_df['volume_ma7'] >= MIN_VOLUME_MA7]
                 
                 # Create target (future price) and timestamp-aligned view
                 price_df['future_price'] = price_df['price'].shift(-prediction_days)
@@ -329,10 +408,22 @@ class PricePredictor:
                     items_with_features += 1
                     # Extract item name features
                     item_features = self.feature_extractor.get_feature_vector(item['market_hash_name'])
+
+                    # Derive coarse item_type label from one-hot type features for banding logic
+                    if item_features['type_weapon_skin'] == 1.0:
+                        item_type_label = 'weapon_skin'
+                    elif item_features['type_sticker'] == 1.0:
+                        item_type_label = 'sticker'
+                    elif item_features['type_gloves'] == 1.0:
+                        item_type_label = 'gloves'
+                    elif item_features['type_knife'] == 1.0:
+                        item_type_label = 'knife'
+                    else:
+                        item_type_label = 'other'
                     
                     # Combine price/volume features with item name features
                     for _, row in price_df.iterrows():
-                        # Price/volume and momentum/time/event features
+                        # Price/volume and momentum/time/event features + bands
                         price_features = [
                             row['price'],
                             row['price_ma7'],
@@ -348,6 +439,8 @@ class PricePredictor:
                             row['is_major_today'],
                             row['max_stars_prev_7d'],
                             row['max_stars_prev_30d'],
+                            self._get_price_band(row['price'], item_type_label),
+                            self._get_volume_band(row['volume_ma7']),
                         ]
                         
                         # Item name features (convert dict to list in consistent order)
@@ -379,7 +472,9 @@ class PricePredictor:
                         if current_price is None or current_price == 0:
                             continue
                         future_price = row['future_price']
-                        target_return = (future_price - current_price) / current_price
+                        raw_return = (future_price - current_price) / current_price
+                        # Clip extreme moves to stabilize training
+                        target_return = float(np.clip(raw_return, -MAX_ABS_RETURN, MAX_ABS_RETURN))
 
                         all_features.append(combined_features)
                         all_targets.append(target_return)
@@ -405,6 +500,7 @@ class PricePredictor:
         use_event_window=False,
         pre_event_days=14,
         post_event_days=30,
+        model_type: str = "rf",
     ):
         """
         Train a Random Forest model for the specified game
@@ -421,6 +517,8 @@ class PricePredictor:
                 deriving the event window.
             post_event_days: Days after last event to include when
                 deriving the event window.
+            model_type: 'rf' for RandomForestRegressor, 'gb' for
+                HistGradientBoostingRegressor.
         """
         mode_str = f"sample mode ({max_items} items)" if max_items else "full mode"
         logging.info(f"Training model for {game_id} in {mode_str}")
@@ -477,13 +575,29 @@ class PricePredictor:
         X_train, X_test = X[:split_idx], X[split_idx:]
         y_train, y_test = y[:split_idx], y[split_idx:]
         
-        # Scale features
+        # Scale features (tree-based models don't strictly need this, but we keep
+        # it for consistency across model types).
         scaler = StandardScaler()
         X_train_scaled = scaler.fit_transform(X_train)
         X_test_scaled = scaler.transform(X_test)
         
         # Train model on percentage returns
-        model = RandomForestRegressor(n_estimators=100, random_state=42)
+        if model_type == "gb":
+            logging.info("Using HistGradientBoostingRegressor (gradient boosting)")
+            model = HistGradientBoostingRegressor(
+                max_depth=6,
+                learning_rate=0.05,
+                max_iter=300,
+                random_state=42,
+            )
+        else:
+            logging.info("Using RandomForestRegressor (baseline)")
+            model = RandomForestRegressor(
+                n_estimators=200,
+                max_depth=None,
+                random_state=42,
+                n_jobs=-1,
+            )
         model.fit(X_train_scaled, y_train)
         
         # Evaluate model (errors are on returns, not raw prices)
@@ -499,49 +613,53 @@ class PricePredictor:
         logging.info(f"  Mean Absolute Error (returns): {mae:.6f}")
         logging.info(f"  R2 Score: {r2:.4f}")
         
-        # Feature importance
-        feature_importance = model.feature_importances_
-        logging.info(f"  Top 5 most important features:")
-        feature_names = [
-            'price',
-            'price_ma7',
-            'price_ma30',
-            'price_std7',
-            'volume_ma7',
-            'ret_7',
-            'ret_30',
-            'day_of_week',
-            'month',
-            'num_events',
-            'has_event_today',
-            'is_major_today',
-            'max_stars_prev_7d',
-            'max_stars_prev_30d',
-            'type_weapon_skin',
-            'type_sticker',
-            'type_case',
-            'type_agent',
-            'type_gloves',
-            'type_knife',
-            'type_other',
-            'is_weapon_skin',
-            'condition_quality',
-            'is_stattrak',
-            'is_souvenir',
-            'has_sticker',
-            'is_case',
-            'is_sticker',
-            'is_agent',
-            'is_gloves',
-            'is_knife',
-        ]
-        top_indices = np.argsort(feature_importance)[-5:][::-1]
-        for idx in top_indices:
-            # Guard against mismatch between feature_names and model.n_features_in_
-            if idx < len(feature_names):
-                logging.info(f"    {feature_names[idx]}: {feature_importance[idx]:.4f}")
-            else:
-                logging.info(f"    feature_{idx}: {feature_importance[idx]:.4f}")
+        # Feature importance (if the model exposes it)
+        feature_importance = getattr(model, "feature_importances_", None)
+        if feature_importance is not None:
+            logging.info(f"  Top 5 most important features:")
+            feature_names = [
+                'price',
+                'price_ma7',
+                'price_ma30',
+                'price_std7',
+                'volume_ma7',
+                'ret_7',
+                'ret_30',
+                'day_of_week',
+                'month',
+                'num_events',
+                'has_event_today',
+                'is_major_today',
+                'max_stars_prev_7d',
+                'max_stars_prev_30d',
+                'price_band',
+                'volume_band',
+                'type_weapon_skin',
+                'type_sticker',
+                'type_case',
+                'type_agent',
+                'type_gloves',
+                'type_knife',
+                'type_other',
+                'is_weapon_skin',
+                'condition_quality',
+                'is_stattrak',
+                'is_souvenir',
+                'has_sticker',
+                'is_case',
+                'is_sticker',
+                'is_agent',
+                'is_gloves',
+                'is_knife',
+            ]
+            top_indices = np.argsort(feature_importance)[-5:][::-1]
+            for idx in top_indices:
+                if idx < len(feature_names):
+                    logging.info(f"    {feature_names[idx]}: {feature_importance[idx]:.4f}")
+                else:
+                    logging.info(f"    feature_{idx}: {feature_importance[idx]:.4f}")
+        else:
+            logging.info("  (Model does not expose feature_importances_)")
         
         # Save model and scaler
         self.models[game_id] = model
@@ -646,8 +764,20 @@ class PricePredictor:
         
         # Extract item name features
         item_features = self.feature_extractor.get_feature_vector(item_name)
+
+        # Derive coarse item_type label from one-hot type features for banding logic
+        if item_features['type_weapon_skin'] == 1.0:
+            item_type_label = 'weapon_skin'
+        elif item_features['type_sticker'] == 1.0:
+            item_type_label = 'sticker'
+        elif item_features['type_gloves'] == 1.0:
+            item_type_label = 'gloves'
+        elif item_features['type_knife'] == 1.0:
+            item_type_label = 'knife'
+        else:
+            item_type_label = 'other'
         
-        # Price/volume, momentum, time, and event features
+        # Price/volume, momentum, time, event features, and bands
         price_features = [
             current_price,
             price_ma7,
@@ -663,6 +793,8 @@ class PricePredictor:
             event_is_major_today,
             event_max_stars_prev_7d,
             event_max_stars_prev_30d,
+            self._get_price_band(current_price, item_type_label),
+            self._get_volume_band(volume_ma7),
         ]
         
         # Item name features (same order as in prepare_data)
@@ -701,7 +833,33 @@ class PricePredictor:
         except TypeError:
             logging.error("current_price must be numeric to compute future price")
             return None
-        
+
+        # Optional: log prediction for monitoring (env PRICE_PREDICTOR_LOG_PREDICTIONS=1)
+        if os.environ.get("PRICE_PREDICTOR_LOG_PREDICTIONS", "").strip() in ("1", "true", "yes"):
+            try:
+                log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
+                os.makedirs(log_dir, exist_ok=True)
+                log_file = os.path.join(log_dir, "prediction_log.csv")
+                from datetime import datetime
+                row = {
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                    "game_id": game_id,
+                    "item_name": item_name,
+                    "current_price": current_price,
+                    "predicted_price": future_price,
+                    "predicted_return": predicted_return,
+                    "item_type": item_type_label,
+                    "price_band": self._get_price_band(current_price, item_type_label),
+                    "volume_band": self._get_volume_band(volume_ma7),
+                }
+                write_header = not os.path.exists(log_file)
+                with open(log_file, "a", encoding="utf-8") as f:
+                    if write_header:
+                        f.write(",".join(row.keys()) + "\n")
+                    f.write(",".join(str(row[k]) for k in row) + "\n")
+            except Exception as e:
+                logging.debug("Prediction log write failed: %s", e)
+
         return future_price
     
     def save_models(self, path='models'):

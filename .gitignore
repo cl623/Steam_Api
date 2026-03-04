@@ -26,8 +26,19 @@ data/logs/
 flask_session/
 
 # Model files (large binary files)
-models/*.joblib
+models/
+models_*/
 *.joblib
+
+# Comparison and diagnostic output (regenerable)
+comparison_output/
+
+# Data directory (local DB and collected data)
+data/
+
+# Temporary state / export files
+pagination_state.json
+steam_market_summary.csv
 
 # IDE
 .vscode/

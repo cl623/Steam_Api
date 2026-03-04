@@ -101,6 +101,7 @@ python scripts/run_collector.py
 - **[Cookie Setup Guide](docs/COOKIE_SETUP_GUIDE.md)** - Detailed cookie configuration
 - **[Database Schema Review](docs/DATABASE_SCHEMA_ML_REVIEW.md)** - ML optimization details
 - **[Data Collection Improvements](docs/DATA_COLLECTION_IMPROVEMENTS.md)** - Collector enhancements
+- **[ML Scripts and Features](docs/ML_SCRIPTS_AND_FEATURES.md)** - Machine learning: training, comparison, diagnostics, monitoring (Version 2.2)
 
 ## Key Features
 
@@ -121,6 +122,17 @@ python scripts/run_collector.py
 - **Price History Charts**: Last 3 months on listings, full history in cart
 - **Dark Mode**: Toggle in Settings
 - **Cart Management**: Add items, view full history
+
+### Machine learning (price predictions)
+
+The app uses **return-based, event-aware** models (Random Forest or Gradient Boosting) to predict future prices. Models predict percentage returns over a horizon (e.g. 7 days); predictions are converted back to prices in the UI.
+
+- **Training:** `scripts/train_model.py` (sample/full mode, pause/resume). For event-window and GB models, use the `PricePredictor.train_model()` API (see docs).
+- **Comparison & plots:** `scripts/run_comparison_with_plots.py` compares RF vs GB and writes metrics plus diagnostic plots to an output directory.
+- **Diagnostics:** `python -m ml.model_diagnostics --model-dir <path> --game-id 730` to evaluate a saved model and generate scatter/histogram/feature-importance plots.
+- **Prediction logging:** Set `PRICE_PREDICTOR_LOG_PREDICTIONS=1` to log each prediction to `logs/prediction_log.csv`.
+
+**Documentation:** [ML Scripts and Features](docs/ML_SCRIPTS_AND_FEATURES.md) (scripts, training API, comparison, monitoring). See also [VERSION2.2](docs/VERSION2.2.md) for milestones and production model choice.
 
 ## Troubleshooting
 

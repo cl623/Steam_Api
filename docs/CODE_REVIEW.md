@@ -4,7 +4,8 @@
 1. [app.py - Flask Web Application](#apppy)
 2. [market_history_collector.py - Data Collection System](#market_history_collectorpy)
 3. [price_predictor.py - ML Price Prediction](#price_predictorpy)
-4. [Issues & Recommendations](#issues)
+4. [Machine learning models and documentation](#machine-learning-models-and-documentation)
+5. [Issues & Recommendations](#issues--recommendations)
 
 ---
 
@@ -339,6 +340,8 @@
 
 ## price_predictor.py - ML Price Prediction
 
+**Note:** The implementation has been extended since this review (return-based target, event-aware window, Gradient Boosting option, banded features, prediction logging). For current usage, scripts, and training options, see **[docs/ML_SCRIPTS_AND_FEATURES.md](ML_SCRIPTS_AND_FEATURES.md)** and **[docs/VERSION2.2.md](VERSION2.2.md)**.
+
 ### **Class: `PricePredictor`**
 
 #### **Method: `__init__(self, db_path='market_data.db')`**
@@ -407,6 +410,24 @@
 **Validation:**
 - ⚠️ **ISSUE:** Uses 'csgo' and 'maplestory' instead of numeric IDs
 - ⚠️ **ISSUE:** Example may not work due to game_id mismatch
+
+---
+
+## Machine learning models and documentation
+
+The ML stack now includes:
+
+- **Return-based targets:** Models predict percentage return over a horizon; `predict_price` converts to future price. Targets are clipped and illiquid samples filtered (see `docs/VERSION2.2.md`).
+- **Model types:** Random Forest (`model_type='rf'`) and HistGradientBoostingRegressor (`model_type='gb'`); GB is recommended for production.
+- **Event-aware training:** Optional time window derived from `cs2_events`; event features joined from `cs2_event_daily` (see `docs/VERSION2.1.md`).
+- **Scripts:**  
+  - `scripts/train_model.py` – train and save a model (sample/full, pause/resume).  
+  - `ml/model_comparison.py` – compare RF vs GB on the same split; optional GB tuning.  
+  - `scripts/run_comparison_with_plots.py` – run comparison and write metrics table + diagnostic plots.  
+  - `ml/model_diagnostics.py` – load a saved model and generate scatter/histogram/feature-importance plots.
+- **Monitoring:** Optional prediction logging to `logs/prediction_log.csv` via `PRICE_PREDICTOR_LOG_PREDICTIONS=1`.
+
+**Reference:** **[docs/ML_SCRIPTS_AND_FEATURES.md](ML_SCRIPTS_AND_FEATURES.md)** for full script usage, training API (`train_model` parameters, `save_models`/`load_models`), and feature summary. **[docs/VERSION2.0.md](VERSION2.0.md)** (roadmap), **[docs/VERSION2.1.md](VERSION2.1.md)** (events), **[docs/VERSION2.2.md](VERSION2.2.md)** (comparison, tuning, production choice).
 
 ---
 
