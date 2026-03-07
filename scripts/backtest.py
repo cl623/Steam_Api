@@ -60,7 +60,8 @@ MODELS = {
     "gb": (
         "Gradient Boosting",
         lambda: HistGradientBoostingRegressor(
-            max_depth=6, learning_rate=0.05, max_iter=300, random_state=42
+            max_depth=6, learning_rate=0.05, max_iter=300, random_state=42,
+            loss="absolute_error",
         ),
     ),
 }
@@ -119,10 +120,9 @@ def _generate_demo_data(
     extractor = ItemFeatureExtractor()
     items = DEMO_ITEMS[:n_items]
 
-    base_prices = rng.lognormal(mean=1.5, sigma=1.2, size=n_items).clip(0.03, 500)
+    base_prices = rng.lognormal(mean=1.5, sigma=1.2, size=n_items).clip(1.0, 500)
     base_volumes = rng.lognormal(mean=3.0, sigma=1.0, size=n_items).clip(2, 5000).astype(int)
 
-    # Assign each item a behavioural archetype
     archetypes = rng.choice(
         ["uptrend", "downtrend", "mean_revert", "volatile", "stable"],
         size=n_items,
@@ -130,6 +130,8 @@ def _generate_demo_data(
 
     start_date = pd.Timestamp("2025-06-01")
     all_X, all_y, all_names, all_ts = [], [], [], []
+
+    pp = PricePredictor.__new__(PricePredictor)
 
     for i, item_name in enumerate(items):
         price = base_prices[i]
@@ -162,7 +164,7 @@ def _generate_demo_data(
                 drift -= 0.005
 
             shock = rng.normal(0, noise)
-            price = max(0.03, price * (1 + drift + shock))
+            price = max(1.0, price * (1 + drift + shock))
             prices.append(price)
 
         prices = np.array(prices)
@@ -184,14 +186,11 @@ def _generate_demo_data(
             ts = start_date + pd.Timedelta(days=d)
             p = prices[d]
             fp = prices[d + prediction_days]
-            ret = (fp - p) / p if p > 0 else 0.0
+            ret = float(np.log(fp / p)) if p > 0 and fp > 0 else 0.0
 
             w7 = prices[max(0, d - 6):d + 1]
             w30 = prices[max(0, d - 29):d + 1]
             v7 = volumes[max(0, d - 6):d + 1]
-
-            from ml.price_predictor import PricePredictor as _PP
-            pp = _PP.__new__(_PP)
 
             features = [
                 p,
@@ -288,6 +287,12 @@ def _generate_plots(
     out_dir.mkdir(parents=True, exist_ok=True)
     model_keys = list(plot_data.keys())
 
+    # Convert log returns to simple percentage returns for all display purposes
+    y_test_pct = np.exp(y_test) - 1
+    pred_pct = {}
+    for key in model_keys:
+        pred_pct[key] = np.exp(plot_data[key]["pred_all"]) - 1
+
     # ── 1. Equity Curves (all models, with & without fees) ──────────
     fig, ax = plt.subplots(figsize=(12, 5))
     for key in model_keys:
@@ -313,8 +318,8 @@ def _generate_plots(
     for i, key in enumerate(model_keys):
         d = plot_data[key]
         ax = axes[0, i]
-        pred = d["pred_all"]
-        actual = y_test
+        pred = pred_pct[key]
+        actual = y_test_pct
         ax.scatter(actual * 100, pred * 100, alpha=0.15, s=6,
                    color=COLORS.get(key, "#333"), rasterized=True)
         lo = min(actual.min(), pred.min()) * 100
@@ -337,8 +342,8 @@ def _generate_plots(
     fig, axes = plt.subplots(1, n_models, figsize=(5 * n_models, 4.5), squeeze=False)
     for i, key in enumerate(model_keys):
         d = plot_data[key]
-        pred = d["pred_all"]
-        actual = y_test
+        pred = pred_pct[key]
+        actual = y_test_pct
         tp = int(np.sum((pred > 0) & (actual > 0)))
         tn = int(np.sum((pred <= 0) & (actual <= 0)))
         fp = int(np.sum((pred > 0) & (actual <= 0)))
@@ -367,13 +372,13 @@ def _generate_plots(
         d = plot_data[key]
         ax = axes[0, i]
         bins = np.linspace(
-            min(y_test.min(), d["pred_all"].min()) * 100,
-            max(y_test.max(), d["pred_all"].max()) * 100,
+            min(y_test_pct.min(), pred_pct[key].min()) * 100,
+            max(y_test_pct.max(), pred_pct[key].max()) * 100,
             60,
         )
-        ax.hist(y_test * 100, bins=bins, alpha=0.5, color=COLORS["neutral"],
+        ax.hist(y_test_pct * 100, bins=bins, alpha=0.5, color=COLORS["neutral"],
                 label="Actual", edgecolor="white", linewidth=0.3)
-        ax.hist(d["pred_all"] * 100, bins=bins, alpha=0.5, color=COLORS.get(key, "#333"),
+        ax.hist(pred_pct[key] * 100, bins=bins, alpha=0.5, color=COLORS.get(key, "#333"),
                 label="Predicted", edgecolor="white", linewidth=0.3)
         ax.axvline(0, color="k", linestyle="--", alpha=0.4)
         ax.set_xlabel("7-day return (%)")
@@ -439,8 +444,9 @@ def _generate_plots(
     for i, key in enumerate(model_keys):
         d = plot_data[key]
         ax = axes[0, i]
-        pred = d["pred_all"]
-        residuals = (y_test - pred) * 100
+        pred = pred_pct[key]
+        actual = y_test_pct
+        residuals = (actual - pred) * 100
         ax.scatter(pred * 100, residuals, alpha=0.12, s=5,
                    color=COLORS.get(key, "#333"), rasterized=True)
         ax.axhline(0, color="k", linestyle="--", alpha=0.5)
@@ -509,7 +515,8 @@ def run_backtest(
         model_keys = ["rf", "gb"]
 
     fee_rate = fee_pct / 100.0
-    breakeven_return = (1.0 / (1.0 - fee_rate)) - 1.0
+    breakeven_return = np.log(1.0 / (1.0 - fee_rate))
+    breakeven_pct = (np.exp(breakeven_return) - 1) * 100
 
     # ── Header ──────────────────────────────────────────────────────────
     print("\n" + "=" * 80)
@@ -517,7 +524,7 @@ def run_backtest(
     print("=" * 80)
     print(f"  Game ID            : {game_id}")
     print(f"  Starting balance   : ${starting_balance:.2f}")
-    print(f"  Sell fee           : {fee_pct:.1f}%  (break-even return: {breakeven_return * 100:.1f}%)")
+    print(f"  Sell fee           : {fee_pct:.1f}%  (break-even return: {breakeven_pct:.1f}%)")
     print(f"  Top-K picks / week : {top_k}")
     print(f"  Test window        : last {test_months} months of data")
     print(f"  Models             : {', '.join(MODELS[k][0] for k in model_keys)}")
@@ -550,17 +557,37 @@ def run_backtest(
         result = predictor.prepare_data(
             game_id, max_items=max_items, from_date=from_date, to_date=to_date,
         )
-        if result[0] is None or result[3] is None:
-            print("\nERROR: No data available. Make sure you have price history in the database.")
+        if result is None or not isinstance(result, tuple) or len(result) < 4:
+            print("\nERROR: prepare_data returned an unexpected result.")
             print("       Run with --demo to see the backtest with synthetic data.\n")
             return
         X, y, item_names, timestamps = result
+        if X is None or timestamps is None:
+            print("\nERROR: No data available. Make sure you have price history in the database.")
+            print("       Run with --demo to see the backtest with synthetic data.\n")
+            return
 
     sort_idx = np.argsort(timestamps)
     X = X[sort_idx]
     y = y[sort_idx]
     item_names = [item_names[i] for i in sort_idx]
     timestamps = timestamps[sort_idx]
+
+    # ── 1b. Sanitise NaN / Inf values from sparse DB data ────────────
+    nan_mask = np.isnan(X).any(axis=1) | np.isinf(X).any(axis=1) | np.isnan(y) | np.isinf(y)
+    n_bad = int(nan_mask.sum())
+    if n_bad > 0:
+        logging.warning("Dropped %d rows with NaN/Inf values (%.1f%% of data)", n_bad, n_bad / len(X) * 100)
+        good = ~nan_mask
+        X = X[good]
+        y = y[good]
+        item_names = [item_names[i] for i, g in enumerate(good) if g]
+        timestamps = timestamps[good]
+
+    if len(X) < 20:
+        print("\nERROR: Not enough clean data for a meaningful backtest.")
+        print("       Run with --demo to see the backtest with synthetic data.\n")
+        return
 
     # ── 2. Chronological train / test split ─────────────────────────────
     all_dates = pd.Series(pd.to_datetime(timestamps).normalize())
@@ -570,11 +597,14 @@ def run_backtest(
     train_mask = all_dates < test_start
     test_mask = all_dates >= test_start
 
-    X_train, y_train = X[train_mask], y[train_mask]
-    X_test, y_test = X[test_mask], y[test_mask]
-    test_item_names = [item_names[i] for i, m in enumerate(test_mask) if m]
-    test_timestamps = timestamps[test_mask]
-    test_dates = pd.Series(pd.to_datetime(test_timestamps).normalize())
+    train_idx = train_mask.values
+    test_idx = test_mask.values
+    X_train, y_train = X[train_idx], y[train_idx]
+    X_test, y_test = X[test_idx], y[test_idx]
+    item_names_arr = np.array(item_names)
+    test_item_names = item_names_arr[test_idx].tolist()
+    test_timestamps = timestamps[test_idx]
+    test_dates = all_dates[test_mask].reset_index(drop=True)
 
     print(f"\n  Observations  : {len(X):,} total")
     print(f"  Training set  : {len(X_train):,}  (before {test_start.strftime('%Y-%m-%d')})")
@@ -591,7 +621,8 @@ def run_backtest(
     X_train_s = scaler.fit_transform(X_train)
     X_test_s = scaler.transform(X_test)
 
-    test_prices = X_test[:, 0]  # feature index 0 = current price
+    test_prices = X_test[:, 0]   # feature index 0 = current price
+    test_volumes = X_test[:, 4]  # feature index 4 = volume_ma7
 
     # Weekly buckets (non-overlapping 7-day periods)
     weeks = ((test_dates - test_start).dt.days // 7).values
@@ -641,11 +672,15 @@ def run_backtest(
             wk_actual = y_test[wk_idx]
             wk_items = [test_item_names[i] for i in wk_idx]
             wk_prices = test_prices[wk_idx]
+            wk_vols = test_volumes[wk_idx]
             wk_date = test_dates.iloc[wk_idx[0]]
 
-            # Only trade items with predicted return above break-even threshold
             threshold = max(min_predicted_return, breakeven_return)
-            viable = np.where(wk_pred > threshold)[0]
+            MIN_TRADE_VOLUME = 3.0
+            VOLUME_CAP_FRAC = 0.05
+            viable = np.where(
+                (wk_pred > threshold) & (wk_vols >= MIN_TRADE_VOLUME)
+            )[0]
 
             if len(viable) == 0:
                 weekly_log.append(dict(
@@ -657,38 +692,54 @@ def run_backtest(
                 bal_curve_nf.append(balance_nf)
                 continue
 
-            pick_k = min(top_k, len(viable))
-            best_in_viable = np.argsort(wk_pred[viable])[-pick_k:][::-1]
-            picks = viable[best_in_viable]
+            # Deduplicate: keep only the highest-predicted observation per item
+            sorted_viable = viable[np.argsort(wk_pred[viable])[::-1]]
+            seen_items = set()
+            deduped = []
+            for v in sorted_viable:
+                item = wk_items[v]
+                if item not in seen_items:
+                    seen_items.add(item)
+                    deduped.append(v)
+            deduped = np.array(deduped)
+            pick_k = min(top_k, len(deduped))
+            picks = deduped[:pick_k]
 
-            alloc = balance / pick_k
-            alloc_nf = balance_nf / pick_k
+            equal_alloc = balance / pick_k
+            equal_alloc_nf = balance_nf / pick_k
 
             wk_pnl = 0.0
             wk_pnl_nf = 0.0
 
             for p in picks:
-                pr = wk_pred[p]
-                ar = wk_actual[p]
-                ar_fee = (1 + ar) * (1 - fee_rate) - 1
+                pr = wk_pred[p]          # predicted log return
+                ar_log = wk_actual[p]    # actual log return
+                ar_pct = np.exp(ar_log) - 1.0
+                ar_fee = (1 + ar_pct) * (1 - fee_rate) - 1
+
+                # Cap position by 5% of daily dollar volume
+                vol_cap = VOLUME_CAP_FRAC * wk_vols[p] * wk_prices[p]
+                alloc = min(equal_alloc, vol_cap)
+                alloc_nf = min(equal_alloc_nf, vol_cap)
 
                 pnl = alloc * ar_fee
-                pnl_nf = alloc_nf * ar
+                pnl_nf = alloc_nf * ar_pct
 
                 wk_pnl += pnl
                 wk_pnl_nf += pnl_nf
                 total_trades += 1
                 if ar_fee > 0:
                     wins += 1
-                if ar > 0:
+                if ar_pct > 0:
                     wins_nf += 1
 
                 trade_returns.append(ar_fee)
-                trade_returns_nf.append(ar)
+                trade_returns_nf.append(ar_pct)
 
                 all_trades.append(dict(
                     week=wk, item=wk_items[p], buy_price=wk_prices[p],
-                    pred_ret=pr, actual_ret=ar, ret_after_fees=ar_fee, pnl=pnl,
+                    pred_ret=np.exp(pr) - 1.0, actual_ret=ar_pct,
+                    ret_after_fees=ar_fee, pnl=pnl,
                 ))
 
             balance += wk_pnl
@@ -731,6 +782,18 @@ def run_backtest(
         std_ret = np.std(trade_returns) * 100 if len(trade_returns) > 1 else 0
         sharpe = (np.mean(trade_returns) / np.std(trade_returns)) if len(trade_returns) > 1 and np.std(trade_returns) > 0 else 0
 
+        gross_profits = sum(r for r in trade_returns if r > 0)
+        gross_losses = abs(sum(r for r in trade_returns if r < 0))
+        profit_factor = gross_profits / gross_losses if gross_losses > 0 else float("inf")
+        profit_factor_nf = (
+            sum(r for r in trade_returns_nf if r > 0) / abs(sum(r for r in trade_returns_nf if r < 0))
+            if any(r < 0 for r in trade_returns_nf) else float("inf")
+        )
+
+        downside = [r for r in trade_returns if r < 0]
+        downside_std = np.std(downside) if len(downside) > 1 else 0
+        sortino = (np.mean(trade_returns) / downside_std) if downside_std > 0 else 0
+
         print(f"\n  +{'-' * 33}+{'-' * 16}+{'-' * 16}+")
         print(f"  | {'Metric':31s} | {'With Fees':>14s} | {'No Fees':>14s} |")
         print(f"  +{'-' * 33}+{'-' * 16}+{'-' * 16}+")
@@ -741,7 +804,11 @@ def run_backtest(
         print(f"  | {'Total Trades':31s} | {total_trades:>14,} | {total_trades:>14,} |")
         print(f"  | {'Win Rate':31s} | {win_rate:>12.1f}% | {win_rate_nf:>12.1f}% |")
         print(f"  | {'Avg Return / Trade':31s} | {avg_ret:>+12.2f}% | {avg_ret_nf:>+12.2f}% |")
-        print(f"  | {'Sharpe (per-trade, with fees)':31s} | {sharpe:>14.3f} |                |")
+        pf_str = f"{profit_factor:>14.2f}" if profit_factor != float("inf") else "             ∞"
+        pf_nf_str = f"{profit_factor_nf:>14.2f}" if profit_factor_nf != float("inf") else "             ∞"
+        print(f"  | {'Profit Factor':31s} | {pf_str} | {pf_nf_str} |")
+        print(f"  | {'Sharpe (per-trade)':31s} | {sharpe:>14.3f} |                |")
+        print(f"  | {'Sortino (per-trade)':31s} | {sortino:>14.3f} |                |")
         print(f"  | {'Direction Accuracy (full test)':31s} | {direction_acc:>12.1f}% |                |")
         print(f"  +{'-' * 33}+{'-' * 16}+{'-' * 16}+")
 
@@ -775,7 +842,9 @@ def run_backtest(
             ret=total_ret, ret_nf=total_ret_nf,
             dd=max_dd, dd_nf=max_dd_nf,
             trades=total_trades, win_rate=win_rate, win_rate_nf=win_rate_nf,
-            sharpe=sharpe, direction_acc=direction_acc,
+            sharpe=sharpe, sortino=sortino,
+            profit_factor=profit_factor,
+            direction_acc=direction_acc,
         ))
 
         try:
@@ -815,7 +884,9 @@ def run_backtest(
             ("Max Drawdown", lambda s: f"{s['dd']:>15.2f}%"),
             ("Win Rate (w/ fees)", lambda s: f"{s['win_rate']:>15.1f}%"),
             ("Win Rate (no fees)", lambda s: f"{s['win_rate_nf']:>15.1f}%"),
+            ("Profit Factor", lambda s: f"{s['profit_factor']:>18.2f}" if s['profit_factor'] != float("inf") else "                 ∞"),
             ("Sharpe (per-trade)", lambda s: f"{s['sharpe']:>18.3f}"),
+            ("Sortino (per-trade)", lambda s: f"{s['sortino']:>18.3f}"),
             ("Direction Accuracy", lambda s: f"{s['direction_acc']:>15.1f}%"),
             ("Total Trades", lambda s: f"{s['trades']:>18,}"),
         ]
@@ -826,9 +897,10 @@ def run_backtest(
             print()
 
     # ── Benchmark ───────────────────────────────────────────────────────
-    avg_mkt = np.mean(y_test) * 100
-    med_mkt = np.median(y_test) * 100
-    pct_positive = np.mean(y_test > 0) * 100
+    y_test_pct = (np.exp(y_test) - 1) * 100
+    avg_mkt = np.mean(y_test_pct)
+    med_mkt = np.median(y_test_pct)
+    pct_positive = np.mean(y_test_pct > 0) * 100
     print(f"\n{'=' * 80}")
     print(f"  MARKET BENCHMARK  (test period, {len(y_test):,} observations)")
     print(f"    Mean 7-day return   : {avg_mkt:>+.2f}%")

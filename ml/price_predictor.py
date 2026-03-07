@@ -23,9 +23,10 @@ logging.basicConfig(
     ]
 )
 
-# Constants for return clipping and liquidity filtering
-MAX_ABS_RETURN = 3.0  # cap extreme percentage moves to [-300%, +300%]
-MIN_VOLUME_MA7 = 2.0  # skip very illiquid observations (average volume < 2 per day)
+# Constants for return clipping, liquidity filtering, and price floor
+MAX_ABS_RETURN = 3.0   # cap extreme log-returns (e^3 ≈ 20x gain, e^-3 ≈ 95% loss)
+MIN_VOLUME_MA7 = 2.0   # skip very illiquid observations (average volume < 2 per day)
+MIN_PRICE = 1.00        # skip sub-$1 items where fixed-cent rounding distorts returns
 
 class PricePredictor:
     def __init__(self, db_path=None):
@@ -228,9 +229,10 @@ class PricePredictor:
         Prepare data for training by creating features from historical prices
         and item name parsing.
         
-        The target is the future **percentage return** over `prediction_days`
-        rather than the absolute future price, i.e.:
-            (future_price - current_price) / current_price
+        The target is the future **log return** over `prediction_days`:
+            log(future_price / current_price)
+        Log returns are symmetric around zero and stabilize training on
+        fat-tailed Steam market data.
         
         Args:
             game_id: Game ID to process
@@ -301,7 +303,7 @@ class PricePredictor:
             
             if len(items_df) == 0:
                 logging.warning(f"No items found with at least {min_entries} price history entries")
-                return None, None, None
+                return None, None, None, None
             
             all_features = []
             all_targets = []
@@ -395,8 +397,9 @@ class PricePredictor:
                 price_df['ret_7'] = price_df['ret_7'].fillna(0.0)
                 price_df['ret_30'] = price_df['ret_30'].fillna(0.0)
 
-                # Filter out very illiquid observations (low average volume)
+                # Filter out very illiquid and sub-$1 observations
                 price_df = price_df[price_df['volume_ma7'] >= MIN_VOLUME_MA7]
+                price_df = price_df[price_df['price'] >= MIN_PRICE]
                 
                 # Create target (future price) and timestamp-aligned view
                 price_df['future_price'] = price_df['price'].shift(-prediction_days)
@@ -467,13 +470,13 @@ class PricePredictor:
                         # Combine all features
                         combined_features = price_features + item_feature_list
 
-                        # Guard against division by zero when computing returns
                         current_price = row['price']
-                        if current_price is None or current_price == 0:
+                        if current_price is None or current_price <= 0:
                             continue
                         future_price = row['future_price']
-                        raw_return = (future_price - current_price) / current_price
-                        # Clip extreme moves to stabilize training
+                        if future_price is None or future_price <= 0:
+                            continue
+                        raw_return = float(np.log(future_price / current_price))
                         target_return = float(np.clip(raw_return, -MAX_ABS_RETURN, MAX_ABS_RETURN))
 
                         all_features.append(combined_features)
@@ -581,7 +584,7 @@ class PricePredictor:
         X_train_scaled = scaler.fit_transform(X_train)
         X_test_scaled = scaler.transform(X_test)
         
-        # Train model on percentage returns
+        # Train model on log returns
         if model_type == "gb":
             logging.info("Using HistGradientBoostingRegressor (gradient boosting)")
             model = HistGradientBoostingRegressor(
@@ -589,6 +592,7 @@ class PricePredictor:
                 learning_rate=0.05,
                 max_iter=300,
                 random_state=42,
+                loss="absolute_error",
             )
         else:
             logging.info("Using RandomForestRegressor (baseline)")
@@ -673,9 +677,9 @@ class PricePredictor:
         """
         Predict future price for a specific item.
         
-        The underlying model predicts a future **percentage return** over the
+        The underlying model predicts a future **log return** over the
         training horizon (e.g., 7 days), and this method converts that return
-        back into a future price using the provided/current price.
+        back into a future price via: price * exp(predicted_log_return).
         
         IMPROVED: Now automatically calculates moving averages from database if not provided.
         
@@ -824,15 +828,15 @@ class PricePredictor:
         # Scale features
         features_scaled = self.scalers[game_id].transform(features)
         
-        # Make prediction (this is a predicted percentage return)
-        predicted_return = self.models[game_id].predict(features_scaled)[0]
+        # Make prediction (this is a predicted log return)
+        predicted_log_return = self.models[game_id].predict(features_scaled)[0]
 
-        # Convert return back to a future price
         try:
-            future_price = current_price * (1.0 + predicted_return)
+            future_price = current_price * np.exp(predicted_log_return)
         except TypeError:
             logging.error("current_price must be numeric to compute future price")
             return None
+        predicted_return = predicted_log_return
 
         # Optional: log prediction for monitoring (env PRICE_PREDICTOR_LOG_PREDICTIONS=1)
         if os.environ.get("PRICE_PREDICTOR_LOG_PREDICTIONS", "").strip() in ("1", "true", "yes"):

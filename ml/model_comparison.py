@@ -103,7 +103,7 @@ def compare_models(
 
     for name, model in [
         ("rf", RandomForestRegressor(n_estimators=200, random_state=42, n_jobs=-1)),
-        ("gb", HistGradientBoostingRegressor(max_depth=6, learning_rate=0.05, max_iter=300, random_state=42)),
+        ("gb", HistGradientBoostingRegressor(max_depth=6, learning_rate=0.05, max_iter=300, random_state=42, loss="absolute_error")),
     ]:
         model.fit(X_train_s, y_train)
         pred = model.predict(X_test_s)
