@@ -122,7 +122,6 @@ def _generate_demo_data(
     base_prices = rng.lognormal(mean=1.5, sigma=1.2, size=n_items).clip(0.03, 500)
     base_volumes = rng.lognormal(mean=3.0, sigma=1.0, size=n_items).clip(2, 5000).astype(int)
 
-    # Assign each item a behavioural archetype
     archetypes = rng.choice(
         ["uptrend", "downtrend", "mean_revert", "volatile", "stable"],
         size=n_items,
@@ -130,6 +129,8 @@ def _generate_demo_data(
 
     start_date = pd.Timestamp("2025-06-01")
     all_X, all_y, all_names, all_ts = [], [], [], []
+
+    pp = PricePredictor.__new__(PricePredictor)
 
     for i, item_name in enumerate(items):
         price = base_prices[i]
@@ -189,9 +190,6 @@ def _generate_demo_data(
             w7 = prices[max(0, d - 6):d + 1]
             w30 = prices[max(0, d - 29):d + 1]
             v7 = volumes[max(0, d - 6):d + 1]
-
-            from ml.price_predictor import PricePredictor as _PP
-            pp = _PP.__new__(_PP)
 
             features = [
                 p,
@@ -550,17 +548,37 @@ def run_backtest(
         result = predictor.prepare_data(
             game_id, max_items=max_items, from_date=from_date, to_date=to_date,
         )
-        if result[0] is None or result[3] is None:
-            print("\nERROR: No data available. Make sure you have price history in the database.")
+        if result is None or not isinstance(result, tuple) or len(result) < 4:
+            print("\nERROR: prepare_data returned an unexpected result.")
             print("       Run with --demo to see the backtest with synthetic data.\n")
             return
         X, y, item_names, timestamps = result
+        if X is None or timestamps is None:
+            print("\nERROR: No data available. Make sure you have price history in the database.")
+            print("       Run with --demo to see the backtest with synthetic data.\n")
+            return
 
     sort_idx = np.argsort(timestamps)
     X = X[sort_idx]
     y = y[sort_idx]
     item_names = [item_names[i] for i in sort_idx]
     timestamps = timestamps[sort_idx]
+
+    # ── 1b. Sanitise NaN / Inf values from sparse DB data ────────────
+    nan_mask = np.isnan(X).any(axis=1) | np.isinf(X).any(axis=1) | np.isnan(y) | np.isinf(y)
+    n_bad = int(nan_mask.sum())
+    if n_bad > 0:
+        logging.warning("Dropped %d rows with NaN/Inf values (%.1f%% of data)", n_bad, n_bad / len(X) * 100)
+        good = ~nan_mask
+        X = X[good]
+        y = y[good]
+        item_names = [item_names[i] for i, g in enumerate(good) if g]
+        timestamps = timestamps[good]
+
+    if len(X) < 20:
+        print("\nERROR: Not enough clean data for a meaningful backtest.")
+        print("       Run with --demo to see the backtest with synthetic data.\n")
+        return
 
     # ── 2. Chronological train / test split ─────────────────────────────
     all_dates = pd.Series(pd.to_datetime(timestamps).normalize())
@@ -570,11 +588,14 @@ def run_backtest(
     train_mask = all_dates < test_start
     test_mask = all_dates >= test_start
 
-    X_train, y_train = X[train_mask], y[train_mask]
-    X_test, y_test = X[test_mask], y[test_mask]
-    test_item_names = [item_names[i] for i, m in enumerate(test_mask) if m]
-    test_timestamps = timestamps[test_mask]
-    test_dates = pd.Series(pd.to_datetime(test_timestamps).normalize())
+    train_idx = train_mask.values
+    test_idx = test_mask.values
+    X_train, y_train = X[train_idx], y[train_idx]
+    X_test, y_test = X[test_idx], y[test_idx]
+    item_names_arr = np.array(item_names)
+    test_item_names = item_names_arr[test_idx].tolist()
+    test_timestamps = timestamps[test_idx]
+    test_dates = all_dates[test_mask].reset_index(drop=True)
 
     print(f"\n  Observations  : {len(X):,} total")
     print(f"  Training set  : {len(X_train):,}  (before {test_start.strftime('%Y-%m-%d')})")
@@ -591,7 +612,8 @@ def run_backtest(
     X_train_s = scaler.fit_transform(X_train)
     X_test_s = scaler.transform(X_test)
 
-    test_prices = X_test[:, 0]  # feature index 0 = current price
+    test_prices = X_test[:, 0]   # feature index 0 = current price
+    test_volumes = X_test[:, 4]  # feature index 4 = volume_ma7
 
     # Weekly buckets (non-overlapping 7-day periods)
     weeks = ((test_dates - test_start).dt.days // 7).values
@@ -641,11 +663,14 @@ def run_backtest(
             wk_actual = y_test[wk_idx]
             wk_items = [test_item_names[i] for i in wk_idx]
             wk_prices = test_prices[wk_idx]
+            wk_vols = test_volumes[wk_idx]
             wk_date = test_dates.iloc[wk_idx[0]]
 
-            # Only trade items with predicted return above break-even threshold
             threshold = max(min_predicted_return, breakeven_return)
-            viable = np.where(wk_pred > threshold)[0]
+            MIN_TRADE_VOLUME = 3.0
+            viable = np.where(
+                (wk_pred > threshold) & (wk_vols >= MIN_TRADE_VOLUME)
+            )[0]
 
             if len(viable) == 0:
                 weekly_log.append(dict(
@@ -731,6 +756,18 @@ def run_backtest(
         std_ret = np.std(trade_returns) * 100 if len(trade_returns) > 1 else 0
         sharpe = (np.mean(trade_returns) / np.std(trade_returns)) if len(trade_returns) > 1 and np.std(trade_returns) > 0 else 0
 
+        gross_profits = sum(r for r in trade_returns if r > 0)
+        gross_losses = abs(sum(r for r in trade_returns if r < 0))
+        profit_factor = gross_profits / gross_losses if gross_losses > 0 else float("inf")
+        profit_factor_nf = (
+            sum(r for r in trade_returns_nf if r > 0) / abs(sum(r for r in trade_returns_nf if r < 0))
+            if any(r < 0 for r in trade_returns_nf) else float("inf")
+        )
+
+        downside = [r for r in trade_returns if r < 0]
+        downside_std = np.std(downside) if len(downside) > 1 else 0
+        sortino = (np.mean(trade_returns) / downside_std) if downside_std > 0 else 0
+
         print(f"\n  +{'-' * 33}+{'-' * 16}+{'-' * 16}+")
         print(f"  | {'Metric':31s} | {'With Fees':>14s} | {'No Fees':>14s} |")
         print(f"  +{'-' * 33}+{'-' * 16}+{'-' * 16}+")
@@ -741,7 +778,11 @@ def run_backtest(
         print(f"  | {'Total Trades':31s} | {total_trades:>14,} | {total_trades:>14,} |")
         print(f"  | {'Win Rate':31s} | {win_rate:>12.1f}% | {win_rate_nf:>12.1f}% |")
         print(f"  | {'Avg Return / Trade':31s} | {avg_ret:>+12.2f}% | {avg_ret_nf:>+12.2f}% |")
-        print(f"  | {'Sharpe (per-trade, with fees)':31s} | {sharpe:>14.3f} |                |")
+        pf_str = f"{profit_factor:>14.2f}" if profit_factor != float("inf") else "             ∞"
+        pf_nf_str = f"{profit_factor_nf:>14.2f}" if profit_factor_nf != float("inf") else "             ∞"
+        print(f"  | {'Profit Factor':31s} | {pf_str} | {pf_nf_str} |")
+        print(f"  | {'Sharpe (per-trade)':31s} | {sharpe:>14.3f} |                |")
+        print(f"  | {'Sortino (per-trade)':31s} | {sortino:>14.3f} |                |")
         print(f"  | {'Direction Accuracy (full test)':31s} | {direction_acc:>12.1f}% |                |")
         print(f"  +{'-' * 33}+{'-' * 16}+{'-' * 16}+")
 
@@ -775,7 +816,9 @@ def run_backtest(
             ret=total_ret, ret_nf=total_ret_nf,
             dd=max_dd, dd_nf=max_dd_nf,
             trades=total_trades, win_rate=win_rate, win_rate_nf=win_rate_nf,
-            sharpe=sharpe, direction_acc=direction_acc,
+            sharpe=sharpe, sortino=sortino,
+            profit_factor=profit_factor,
+            direction_acc=direction_acc,
         ))
 
         try:
@@ -815,7 +858,9 @@ def run_backtest(
             ("Max Drawdown", lambda s: f"{s['dd']:>15.2f}%"),
             ("Win Rate (w/ fees)", lambda s: f"{s['win_rate']:>15.1f}%"),
             ("Win Rate (no fees)", lambda s: f"{s['win_rate_nf']:>15.1f}%"),
+            ("Profit Factor", lambda s: f"{s['profit_factor']:>18.2f}" if s['profit_factor'] != float("inf") else "                 ∞"),
             ("Sharpe (per-trade)", lambda s: f"{s['sharpe']:>18.3f}"),
+            ("Sortino (per-trade)", lambda s: f"{s['sortino']:>18.3f}"),
             ("Direction Accuracy", lambda s: f"{s['direction_acc']:>15.1f}%"),
             ("Total Trades", lambda s: f"{s['trades']:>18,}"),
         ]

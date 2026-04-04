@@ -1,8 +1,37 @@
 import sqlite3
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
+import numpy as np
 import pandas as pd
+
+
+# Known/recurring Steam sale windows (approximate).  Dates are (month, day)
+# pairs for start and end.  Used to compute days_until_next_sale.
+STEAM_SALE_WINDOWS: List[tuple] = [
+    # Summer Sale – typically late June to early July
+    ((6, 22), (7, 7)),
+    # Winter Sale – typically mid-December to early January
+    ((12, 19), (1, 3)),
+    # Spring Sale – typically mid-March
+    ((3, 14), (3, 21)),
+    # Autumn Sale – typically late November
+    ((11, 21), (11, 28)),
+    # Halloween Sale – typically late October
+    ((10, 28), (11, 1)),
+]
+
+
+def _expand_sale_windows(year_start: int, year_end: int) -> pd.DatetimeIndex:
+    """Return sorted DatetimeIndex of every sale start date across a year range."""
+    dates = []
+    for yr in range(year_start, year_end + 2):
+        for (sm, sd), _ in STEAM_SALE_WINDOWS:
+            try:
+                dates.append(pd.Timestamp(yr, sm, sd))
+            except ValueError:
+                pass
+    return pd.DatetimeIndex(sorted(set(dates)))
 
 
 def build_event_timeline(matches: pd.DataFrame) -> pd.DataFrame:
@@ -113,7 +142,60 @@ def build_daily_event_features(events: pd.DataFrame) -> pd.DataFrame:
         shifted_max.rolling(window=30, min_periods=1).max().fillna(0)
     )
 
+    # --- Forward-looking countdown features (V3.0 Phase 1) ---
+    daily_full = _add_countdown_features(daily_full, events)
+
     return daily_full
+
+
+def _add_countdown_features(
+    daily_full: pd.DataFrame,
+    events: pd.DataFrame,
+) -> pd.DataFrame:
+    """Enrich daily feature table with forward-looking countdowns.
+
+    New columns:
+        days_until_next_event  – days until the next CS2 event starts
+        days_until_next_major  – days until the next major (stars >= 4) starts
+        days_until_next_sale   – days until the next Steam sale window opens
+    """
+    dates = daily_full["date"]
+    min_year = dates.min().year
+    max_year = dates.max().year
+
+    # Collect future event start dates
+    event_starts = pd.DatetimeIndex(
+        events["start_date"].dropna().unique()
+    ).sort_values()
+
+    major_starts = pd.DatetimeIndex(
+        events.loc[events["stars"] >= 4, "start_date"].dropna().unique()
+    ).sort_values()
+
+    sale_starts = _expand_sale_windows(min_year, max_year)
+
+    daily_full["days_until_next_event"] = dates.apply(
+        lambda d: _days_until(d, event_starts)
+    ).astype(float)
+
+    daily_full["days_until_next_major"] = dates.apply(
+        lambda d: _days_until(d, major_starts)
+    ).astype(float)
+
+    daily_full["days_until_next_sale"] = dates.apply(
+        lambda d: _days_until(d, sale_starts)
+    ).astype(float)
+
+    return daily_full
+
+
+def _days_until(current_date: pd.Timestamp, future_dates: pd.DatetimeIndex) -> float:
+    """Return the number of days until the next date in *future_dates* that is
+    >= *current_date*.  Returns NaN if no future date exists."""
+    future = future_dates[future_dates >= current_date]
+    if len(future) == 0:
+        return np.nan
+    return (future[0] - current_date).days
 
 
 def process_hltv_dataset(

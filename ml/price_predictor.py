@@ -301,7 +301,7 @@ class PricePredictor:
             
             if len(items_df) == 0:
                 logging.warning(f"No items found with at least {min_entries} price history entries")
-                return None, None, None
+                return None, None, None, None
             
             all_features = []
             all_targets = []

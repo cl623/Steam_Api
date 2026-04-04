@@ -33,6 +33,8 @@ models_*/
 # Comparison and diagnostic output (regenerable)
 comparison_output/
 backtest_output/
+course_outputs/
+course_eval/
 
 # Data directory (local DB and collected data)
 data/
