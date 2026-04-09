@@ -60,7 +60,8 @@ MODELS = {
     "gb": (
         "Gradient Boosting",
         lambda: HistGradientBoostingRegressor(
-            max_depth=6, learning_rate=0.05, max_iter=300, random_state=42
+            max_depth=6, learning_rate=0.05, max_iter=300, random_state=42,
+            loss="absolute_error",
         ),
     ),
 }
@@ -119,7 +120,7 @@ def _generate_demo_data(
     extractor = ItemFeatureExtractor()
     items = DEMO_ITEMS[:n_items]
 
-    base_prices = rng.lognormal(mean=1.5, sigma=1.2, size=n_items).clip(0.03, 500)
+    base_prices = rng.lognormal(mean=1.5, sigma=1.2, size=n_items).clip(1.0, 500)
     base_volumes = rng.lognormal(mean=3.0, sigma=1.0, size=n_items).clip(2, 5000).astype(int)
 
     archetypes = rng.choice(
@@ -163,7 +164,7 @@ def _generate_demo_data(
                 drift -= 0.005
 
             shock = rng.normal(0, noise)
-            price = max(0.03, price * (1 + drift + shock))
+            price = max(1.0, price * (1 + drift + shock))
             prices.append(price)
 
         prices = np.array(prices)
@@ -185,7 +186,7 @@ def _generate_demo_data(
             ts = start_date + pd.Timedelta(days=d)
             p = prices[d]
             fp = prices[d + prediction_days]
-            ret = (fp - p) / p if p > 0 else 0.0
+            ret = float(np.log(fp / p)) if p > 0 and fp > 0 else 0.0
 
             w7 = prices[max(0, d - 6):d + 1]
             w30 = prices[max(0, d - 29):d + 1]
@@ -286,6 +287,12 @@ def _generate_plots(
     out_dir.mkdir(parents=True, exist_ok=True)
     model_keys = list(plot_data.keys())
 
+    # Convert log returns to simple percentage returns for all display purposes
+    y_test_pct = np.exp(y_test) - 1
+    pred_pct = {}
+    for key in model_keys:
+        pred_pct[key] = np.exp(plot_data[key]["pred_all"]) - 1
+
     # ── 1. Equity Curves (all models, with & without fees) ──────────
     fig, ax = plt.subplots(figsize=(12, 5))
     for key in model_keys:
@@ -311,8 +318,8 @@ def _generate_plots(
     for i, key in enumerate(model_keys):
         d = plot_data[key]
         ax = axes[0, i]
-        pred = d["pred_all"]
-        actual = y_test
+        pred = pred_pct[key]
+        actual = y_test_pct
         ax.scatter(actual * 100, pred * 100, alpha=0.15, s=6,
                    color=COLORS.get(key, "#333"), rasterized=True)
         lo = min(actual.min(), pred.min()) * 100
@@ -335,8 +342,8 @@ def _generate_plots(
     fig, axes = plt.subplots(1, n_models, figsize=(5 * n_models, 4.5), squeeze=False)
     for i, key in enumerate(model_keys):
         d = plot_data[key]
-        pred = d["pred_all"]
-        actual = y_test
+        pred = pred_pct[key]
+        actual = y_test_pct
         tp = int(np.sum((pred > 0) & (actual > 0)))
         tn = int(np.sum((pred <= 0) & (actual <= 0)))
         fp = int(np.sum((pred > 0) & (actual <= 0)))
@@ -365,13 +372,13 @@ def _generate_plots(
         d = plot_data[key]
         ax = axes[0, i]
         bins = np.linspace(
-            min(y_test.min(), d["pred_all"].min()) * 100,
-            max(y_test.max(), d["pred_all"].max()) * 100,
+            min(y_test_pct.min(), pred_pct[key].min()) * 100,
+            max(y_test_pct.max(), pred_pct[key].max()) * 100,
             60,
         )
-        ax.hist(y_test * 100, bins=bins, alpha=0.5, color=COLORS["neutral"],
+        ax.hist(y_test_pct * 100, bins=bins, alpha=0.5, color=COLORS["neutral"],
                 label="Actual", edgecolor="white", linewidth=0.3)
-        ax.hist(d["pred_all"] * 100, bins=bins, alpha=0.5, color=COLORS.get(key, "#333"),
+        ax.hist(pred_pct[key] * 100, bins=bins, alpha=0.5, color=COLORS.get(key, "#333"),
                 label="Predicted", edgecolor="white", linewidth=0.3)
         ax.axvline(0, color="k", linestyle="--", alpha=0.4)
         ax.set_xlabel("7-day return (%)")
@@ -437,8 +444,9 @@ def _generate_plots(
     for i, key in enumerate(model_keys):
         d = plot_data[key]
         ax = axes[0, i]
-        pred = d["pred_all"]
-        residuals = (y_test - pred) * 100
+        pred = pred_pct[key]
+        actual = y_test_pct
+        residuals = (actual - pred) * 100
         ax.scatter(pred * 100, residuals, alpha=0.12, s=5,
                    color=COLORS.get(key, "#333"), rasterized=True)
         ax.axhline(0, color="k", linestyle="--", alpha=0.5)
@@ -507,7 +515,8 @@ def run_backtest(
         model_keys = ["rf", "gb"]
 
     fee_rate = fee_pct / 100.0
-    breakeven_return = (1.0 / (1.0 - fee_rate)) - 1.0
+    breakeven_return = np.log(1.0 / (1.0 - fee_rate))
+    breakeven_pct = (np.exp(breakeven_return) - 1) * 100
 
     # ── Header ──────────────────────────────────────────────────────────
     print("\n" + "=" * 80)
@@ -515,7 +524,7 @@ def run_backtest(
     print("=" * 80)
     print(f"  Game ID            : {game_id}")
     print(f"  Starting balance   : ${starting_balance:.2f}")
-    print(f"  Sell fee           : {fee_pct:.1f}%  (break-even return: {breakeven_return * 100:.1f}%)")
+    print(f"  Sell fee           : {fee_pct:.1f}%  (break-even return: {breakeven_pct:.1f}%)")
     print(f"  Top-K picks / week : {top_k}")
     print(f"  Test window        : last {test_months} months of data")
     print(f"  Models             : {', '.join(MODELS[k][0] for k in model_keys)}")
@@ -668,6 +677,7 @@ def run_backtest(
 
             threshold = max(min_predicted_return, breakeven_return)
             MIN_TRADE_VOLUME = 3.0
+            VOLUME_CAP_FRAC = 0.05
             viable = np.where(
                 (wk_pred > threshold) & (wk_vols >= MIN_TRADE_VOLUME)
             )[0]
@@ -682,38 +692,54 @@ def run_backtest(
                 bal_curve_nf.append(balance_nf)
                 continue
 
-            pick_k = min(top_k, len(viable))
-            best_in_viable = np.argsort(wk_pred[viable])[-pick_k:][::-1]
-            picks = viable[best_in_viable]
+            # Deduplicate: keep only the highest-predicted observation per item
+            sorted_viable = viable[np.argsort(wk_pred[viable])[::-1]]
+            seen_items = set()
+            deduped = []
+            for v in sorted_viable:
+                item = wk_items[v]
+                if item not in seen_items:
+                    seen_items.add(item)
+                    deduped.append(v)
+            deduped = np.array(deduped)
+            pick_k = min(top_k, len(deduped))
+            picks = deduped[:pick_k]
 
-            alloc = balance / pick_k
-            alloc_nf = balance_nf / pick_k
+            equal_alloc = balance / pick_k
+            equal_alloc_nf = balance_nf / pick_k
 
             wk_pnl = 0.0
             wk_pnl_nf = 0.0
 
             for p in picks:
-                pr = wk_pred[p]
-                ar = wk_actual[p]
-                ar_fee = (1 + ar) * (1 - fee_rate) - 1
+                pr = wk_pred[p]          # predicted log return
+                ar_log = wk_actual[p]    # actual log return
+                ar_pct = np.exp(ar_log) - 1.0
+                ar_fee = (1 + ar_pct) * (1 - fee_rate) - 1
+
+                # Cap position by 5% of daily dollar volume
+                vol_cap = VOLUME_CAP_FRAC * wk_vols[p] * wk_prices[p]
+                alloc = min(equal_alloc, vol_cap)
+                alloc_nf = min(equal_alloc_nf, vol_cap)
 
                 pnl = alloc * ar_fee
-                pnl_nf = alloc_nf * ar
+                pnl_nf = alloc_nf * ar_pct
 
                 wk_pnl += pnl
                 wk_pnl_nf += pnl_nf
                 total_trades += 1
                 if ar_fee > 0:
                     wins += 1
-                if ar > 0:
+                if ar_pct > 0:
                     wins_nf += 1
 
                 trade_returns.append(ar_fee)
-                trade_returns_nf.append(ar)
+                trade_returns_nf.append(ar_pct)
 
                 all_trades.append(dict(
                     week=wk, item=wk_items[p], buy_price=wk_prices[p],
-                    pred_ret=pr, actual_ret=ar, ret_after_fees=ar_fee, pnl=pnl,
+                    pred_ret=np.exp(pr) - 1.0, actual_ret=ar_pct,
+                    ret_after_fees=ar_fee, pnl=pnl,
                 ))
 
             balance += wk_pnl
@@ -871,9 +897,10 @@ def run_backtest(
             print()
 
     # ── Benchmark ───────────────────────────────────────────────────────
-    avg_mkt = np.mean(y_test) * 100
-    med_mkt = np.median(y_test) * 100
-    pct_positive = np.mean(y_test > 0) * 100
+    y_test_pct = (np.exp(y_test) - 1) * 100
+    avg_mkt = np.mean(y_test_pct)
+    med_mkt = np.median(y_test_pct)
+    pct_positive = np.mean(y_test_pct > 0) * 100
     print(f"\n{'=' * 80}")
     print(f"  MARKET BENCHMARK  (test period, {len(y_test):,} observations)")
     print(f"    Mean 7-day return   : {avg_mkt:>+.2f}%")
