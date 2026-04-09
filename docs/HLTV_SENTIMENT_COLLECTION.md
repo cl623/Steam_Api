@@ -45,3 +45,38 @@ Many unattended HTTP clients receive a Cloudflare challenge instead of real HTML
 ## Rate limiting
 
 The collector sleeps `--min-delay` seconds (default 2.5) between HTTP requests. Increase it if you see throttling or blocks.
+
+## Reproducible runbook (end-to-end)
+
+Replace paths as needed. Default DB: `data/hltv_sentiment.db`. Training artifacts: `sentiment_models/` (gitignored). Eval outputs: `sentiment_eval/` (gitignored).
+
+### A) Synthetic multimatch sample (no HLTV network)
+
+```text
+python scripts/build_sample_multimatch_dataset.py
+python scripts/import_sample_multimatch.py
+python scripts/train_sentiment_nb.py --split-mode by_match --ngram unigram --label-source hybrid
+python scripts/train_sentiment_nb.py --split-mode by_match --ngram bigram --label-source hybrid --save-dir sentiment_models/nb
+python scripts/train_sentiment_lstm.py --split-mode by_match --epochs 15 --label-source hybrid
+python scripts/eval_sentiment.py --model-type nb --label-source weak --split-mode by_match
+python scripts/eval_sentiment.py --model-type nb --label-source gold --split-mode by_match
+python scripts/eval_sentiment.py --model-type lstm --checkpoint sentiment_models/lstm/lstm_weak.pt --label-source weak --split-mode by_match
+python scripts/eval_sentiment_momentum.py --model-type nb --checkpoint sentiment_models/nb/nb_unigram.joblib
+```
+
+Hand labels: CSV columns `match_id`, `comment_id`, `label` (`neg`/`neu`/`pos` or `0`/`1`/`2`). Apply anytime:
+
+`python scripts/import_gold_labels.py samples/gold_labels_example.csv`
+
+Optional JSONL field `gold_label` is applied on import via [`collector/hltv_comments.py`](collector/hltv_comments.py).
+
+### B) Flags to record for a paper / report
+
+- `--seed` (training and split reproducibility)
+- `--split-mode` (`by_match` for generalization across matches)
+- `--label-source` (`weak`, `hybrid`, `gold` for training; `eval_sentiment.py` supports `weak` vs `gold` truth on the eval split)
+- Model paths written next to `nb_*_metrics.json` / `lstm_metrics.json`
+
+### C) Momentum / velocity report
+
+[`scripts/eval_sentiment_momentum.py`](scripts/eval_sentiment_momentum.py) aggregates per-match velocity bins (`--bin-seconds`) and lag correlations (`--lag-steps`, comment-index offsets) against the scoreline swing proxy. Output: `sentiment_eval/momentum_report.json`.

@@ -63,6 +63,7 @@ class ParsedComment:
     posted_at_unix: Optional[int] = None
     parent_id: Optional[str] = None
     score_context: Optional[str] = None
+    gold_label: Optional[int] = None  # 0 neg, 1 neu, 2 pos; optional on import
 
 
 def build_match_url(match_id: int) -> str:
@@ -193,6 +194,54 @@ def parse_forum_thread_html(html: str, match_id: int) -> list[ParsedComment]:
     if posts:
         return posts
 
+    # Strategy A2: post row + body cell (table-style / alternate skins)
+    for tr in soup.select("tr.postRow, tr.forum-row, tr.postrow"):
+        comment_id = None
+        tid = tr.get("id") or ""
+        m0 = re.match(r"post-(\d+)", tid)
+        if m0:
+            comment_id = m0.group(1)
+        if not comment_id:
+            pid_el = tr.select_one("[id^='post-'], [data-post-id]")
+            if pid_el is not None:
+                pid = pid_el.get("id") or ""
+                m = re.match(r"post-(\d+)", pid)
+                if m:
+                    comment_id = m.group(1)
+                elif pid_el.has_attr("data-post-id"):
+                    try:
+                        comment_id = str(int(pid_el["data-post-id"]))
+                    except (TypeError, ValueError, KeyError):
+                        pass
+        if not comment_id:
+            continue
+        unix = None
+        du = tr.select_one("[data-unix]")
+        if du and du.has_attr("data-unix"):
+            try:
+                raw = int(du["data-unix"])
+                unix = raw // 1000 if raw > 10**11 else raw
+            except (TypeError, ValueError):
+                pass
+        body_el = tr.select_one(
+            "td.postText, td.posttext, .post-msg, .postMessage, .forum-content"
+        )
+        raw_text = _text(body_el) if body_el else _text(tr)
+        if not raw_text:
+            continue
+        posts.append(
+            ParsedComment(
+                comment_id=comment_id,
+                raw_text=raw_text,
+                posted_at_unix=unix,
+                parent_id=None,
+                score_context=None,
+            )
+        )
+
+    if posts:
+        return posts
+
     # Strategy B: data-post-id anywhere
     for el in soup.select("[data-post-id]"):
         try:
@@ -279,15 +328,16 @@ def upsert_comments(
             """
             INSERT INTO hltv_comments (
                 match_id, comment_id, parent_id, posted_at, posted_at_unix,
-                raw_text, score_context, thread_url
-            ) VALUES (?,?,?,?,?,?,?,?)
+                raw_text, score_context, thread_url, gold_label
+            ) VALUES (?,?,?,?,?,?,?,?,?)
             ON CONFLICT(match_id, comment_id) DO UPDATE SET
                 parent_id=excluded.parent_id,
                 posted_at=excluded.posted_at,
                 posted_at_unix=excluded.posted_at_unix,
                 raw_text=excluded.raw_text,
                 score_context=excluded.score_context,
-                thread_url=excluded.thread_url
+                thread_url=excluded.thread_url,
+                gold_label=COALESCE(excluded.gold_label, hltv_comments.gold_label)
             """,
             (
                 match_id,
@@ -298,6 +348,7 @@ def upsert_comments(
                 c.raw_text,
                 c.score_context,
                 thread_url,
+                c.gold_label,
             ),
         )
         n += 1
@@ -337,12 +388,18 @@ def import_jsonl_comments(
             ensure_match_row(conn, mid)
             cid = str(row["comment_id"])
             raw_text = str(row["raw_text"])
+            gl = row.get("gold_label")
+            if gl is not None and gl != "":
+                gl = int(gl)
+            else:
+                gl = None
             pc = ParsedComment(
                 comment_id=cid,
                 raw_text=raw_text,
                 posted_at_unix=row.get("posted_at_unix"),
                 parent_id=row.get("parent_id"),
                 score_context=row.get("score_context"),
+                gold_label=gl,
             )
             upsert_comments(conn, mid, [pc], row.get("thread_url"))
             total += 1

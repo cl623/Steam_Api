@@ -99,4 +99,4 @@ def test_nb_lstm_eval_smoke(tmp_path):
         text=True,
     )
     assert r3.returncode == 0, r3.stderr + r3.stdout
-    assert (ev / "confusion_nb.png").is_file()
+    assert (ev / "confusion_nb_weak.png").is_file()

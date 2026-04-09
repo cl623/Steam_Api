@@ -15,6 +15,7 @@ from .preprocess import clean_text
 from .weak_labels import label_to_id, weak_sentiment_label
 
 SplitMode = Literal["random", "by_match", "by_time"]
+LabelSource = Literal["weak", "gold", "hybrid"]
 
 
 def default_db_path(project_root: Optional[Path] = None) -> Path:
@@ -30,7 +31,8 @@ def load_comments_dataframe(
 ) -> pd.DataFrame:
     """Return raw_text, match_id, posted_at_unix, score_context, comment_id."""
     q = """
-        SELECT c.match_id, c.comment_id, c.raw_text, c.posted_at_unix, c.score_context
+        SELECT c.match_id, c.comment_id, c.raw_text, c.posted_at_unix, c.score_context,
+               c.gold_label
         FROM hltv_comments c
         WHERE LENGTH(TRIM(c.raw_text)) >= ?
         ORDER BY c.match_id, c.posted_at_unix, c.comment_id
@@ -46,7 +48,36 @@ def add_weak_labels(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     out["clean_text"] = out["raw_text"].astype(str).map(clean_text)
     out["label_name"] = out["raw_text"].astype(str).map(weak_sentiment_label)
-    out["label"] = out["label_name"].map(label_to_id)
+    out["weak_label"] = out["label_name"].map(label_to_id)
+    out["label"] = out["weak_label"]
+    return out
+
+
+def apply_label_source(df: pd.DataFrame, source: LabelSource) -> pd.DataFrame:
+    """
+    weak: train/eval on lexicon weak labels.
+    gold: only rows with non-null gold_label (hand labels).
+    hybrid: gold where present, else weak (semi-supervised training).
+    """
+    out = df.copy()
+    if "weak_label" not in out.columns:
+        out = add_weak_labels(out)
+    if "gold_label" not in out.columns:
+        out["gold_label"] = np.nan
+    else:
+        out["gold_label"] = pd.to_numeric(out["gold_label"], errors="coerce")
+
+    if source == "weak":
+        out["label"] = out["weak_label"]
+    elif source == "gold":
+        out = out[out["gold_label"].notna()].copy()
+        out["label"] = out["gold_label"].astype(int)
+    elif source == "hybrid":
+        out["label"] = (
+            out["gold_label"].where(out["gold_label"].notna(), out["weak_label"]).astype(int)
+        )
+    else:
+        raise ValueError(f"Unknown label source: {source}")
     return out
 
 

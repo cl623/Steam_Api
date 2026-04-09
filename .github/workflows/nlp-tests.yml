@@ -1,0 +1,35 @@
+name: NLP sentiment tests
+
+on:
+  push:
+    paths:
+      - "nlp/**"
+      - "collector/hltv_comments.py"
+      - "scripts/**"
+      - "tests/**"
+      - "requirements_python.txt"
+  pull_request:
+    paths:
+      - "nlp/**"
+      - "collector/hltv_comments.py"
+      - "scripts/**"
+      - "tests/**"
+      - "requirements_python.txt"
+
+jobs:
+  pytest-nlp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements_python.txt
+      - name: Run NLP-related tests
+        run: |
+          python -m pytest tests/test_nlp_preprocess.py \
+            tests/test_hltv_parser.py \
+            tests/test_velocity_lag.py \
+            tests/test_gold_labels.py \
+            tests/test_sentiment_pipeline_smoke.py -v --tb=short

@@ -21,7 +21,12 @@ from sklearn.metrics import classification_report, confusion_matrix, f1_score
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from nlp.dataset import add_weak_labels, default_db_path, load_comments_dataframe, train_val_test_split  # noqa: E402
+from nlp.dataset import (  # noqa: E402
+    add_weak_labels,
+    default_db_path,
+    load_comments_dataframe,
+    train_val_test_split,
+)
 from nlp.models_lstm import encode_texts, load_lstm_bundle  # noqa: E402
 from nlp.velocity import (  # noqa: E402
     pearson_spearman,
@@ -82,6 +87,12 @@ def main() -> int:
         default=PROJECT_ROOT / "sentiment_eval",
     )
     ap.add_argument("--velocity-bin-seconds", type=float, default=120.0)
+    ap.add_argument(
+        "--label-source",
+        choices=("weak", "gold"),
+        default="weak",
+        help="weak=lexicon truth; gold=only hand-labeled rows in eval split",
+    )
     args = ap.parse_args()
 
     db_path = args.db or default_db_path()
@@ -102,8 +113,15 @@ def main() -> int:
         random_state=args.seed,
     )
     part = te if not te.empty else df
+    if args.label_source == "gold":
+        part = part[part["gold_label"].notna()].copy()
+        if part.empty:
+            logger.error("No gold-labeled rows in eval split; use weak or label more data.")
+            return 1
+        y_true = part["gold_label"].astype(int).to_numpy()
+    else:
+        y_true = part["label"].to_numpy()
     texts = part["raw_text"].astype(str).tolist()
-    y_true = part["label"].to_numpy()
 
     if args.model_type == "nb":
         ckpt = args.checkpoint or (PROJECT_ROOT / "sentiment_models" / "nb" / "nb_unigram.joblib")
@@ -143,7 +161,10 @@ def main() -> int:
         for j in range(3):
             ax.text(j, i, str(cm[i, j]), ha="center", va="center")
     plt.tight_layout()
-    cm_path = args.out_dir / f"confusion_{args.model_type}.png"
+    cm_path = (
+        args.out_dir
+        / f"confusion_{args.model_type}_{args.label_source}.png"
+    )
     fig.savefig(cm_path, dpi=120)
     plt.close(fig)
 
@@ -168,9 +189,10 @@ def main() -> int:
         else None,
         "correlation_sentiment_score_vs_swing_proxy_pearson": pearson_r,
         "correlation_sentiment_score_vs_swing_proxy_spearman": spearman_r,
-        "note": "Swing proxy uses score_context round-diff heuristic; weak labels for y_true.",
+        "label_source": args.label_source,
+        "note": "Swing proxy uses score_context round-diff heuristic; y_true follows label_source.",
     }
-    out_json = args.out_dir / f"metrics_{args.model_type}.json"
+    out_json = args.out_dir / f"metrics_{args.model_type}_{args.label_source}.json"
     out_json.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     logger.info("Wrote %s and %s", cm_path, out_json)
     print(report)

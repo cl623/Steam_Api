@@ -21,6 +21,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from nlp.dataset import (  # noqa: E402
     add_weak_labels,
+    apply_label_source,
     default_db_path,
     load_comments_dataframe,
     split_meta_dict,
@@ -73,6 +74,12 @@ def main() -> int:
         type=Path,
         default=PROJECT_ROOT / "sentiment_models" / "nb",
     )
+    ap.add_argument(
+        "--label-source",
+        choices=("weak", "gold", "hybrid"),
+        default="weak",
+        help="weak=lexicon; gold=only hand-labeled rows; hybrid=gold else weak",
+    )
     args = ap.parse_args()
 
     db_path = args.db or default_db_path()
@@ -92,21 +99,28 @@ def main() -> int:
         test_fraction=args.test_fraction,
         random_state=args.seed,
     )
-    if tr.empty:
-        logger.error("Train split empty — need more matches/comments.")
+    tr_f = apply_label_source(tr, args.label_source)
+    if tr_f.empty:
+        logger.error(
+            "Train split empty after label-source=%s — add gold labels or use weak/hybrid.",
+            args.label_source,
+        )
         return 1
 
     pipe = build_pipeline(args.ngram, args.max_features)
-    x_tr, y_tr = tr["raw_text"].astype(str), tr["label"].to_numpy()
+    x_tr, y_tr = tr_f["raw_text"].astype(str), tr_f["label"].to_numpy()
     pipe.fit(x_tr, y_tr)
 
     def eval_split(name: str, part) -> dict:
         if part.empty:
             return {"n": 0}
-        y_true = part["label"].to_numpy()
-        y_pred = pipe.predict(part["raw_text"].astype(str))
+        pf = apply_label_source(part, args.label_source)
+        if pf.empty:
+            return {"n": 0, "note": f"no rows for label_source={args.label_source}"}
+        y_true = pf["label"].to_numpy()
+        y_pred = pipe.predict(pf["raw_text"].astype(str))
         return {
-            "n": int(len(part)),
+            "n": int(len(pf)),
             "f1_macro": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
             "f1_micro": float(f1_score(y_true, y_pred, average="micro", zero_division=0)),
             "confusion_matrix": confusion_matrix(y_true, y_pred, labels=[0, 1, 2]).tolist(),
@@ -129,6 +143,7 @@ def main() -> int:
             len(te),
         ),
         "ngram": args.ngram,
+        "label_source": args.label_source,
     }
 
     args.save_dir.mkdir(parents=True, exist_ok=True)

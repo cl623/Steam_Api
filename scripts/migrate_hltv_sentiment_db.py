@@ -75,8 +75,19 @@ def migrate(db_path: Path) -> None:
             """
         )
         conn.commit()
+        _upgrade_comments_gold_column(conn)
+        conn.commit()
     finally:
         conn.close()
+
+
+def _upgrade_comments_gold_column(conn: sqlite3.Connection) -> None:
+    """Add gold_label (0=neg,1=neu,2=pos) for hand-labeled evaluation rows."""
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(hltv_comments)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "gold_label" not in cols:
+        cur.execute("ALTER TABLE hltv_comments ADD COLUMN gold_label INTEGER")
 
 
 def main() -> int:

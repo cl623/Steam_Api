@@ -123,3 +123,33 @@ def pearson_spearman(x: np.ndarray, y: np.ndarray) -> Tuple[float, float]:
     sdf = pd.DataFrame({"a": a, "b": b})
     spear = float(sdf["a"].corr(sdf["b"], method="spearman"))
     return pear, spear
+
+
+def lag_shift_correlation(
+    x: np.ndarray,
+    y: np.ndarray,
+    lag: int,
+) -> Tuple[float, float]:
+    """
+    Correlate x[t] with y[t+lag] (forward shift of y by `lag` steps).
+    Both arrays same length, ordered by time within a match.
+    """
+    if lag < 0:
+        raise ValueError("lag must be non-negative")
+    if lag == 0:
+        return pearson_spearman(x.astype(float), y.astype(float))
+    if len(x) <= lag:
+        return float("nan"), float("nan")
+    return pearson_spearman(x[:-lag].astype(float), y[lag:].astype(float))
+
+
+def mean_abs_velocity(
+    timestamps: np.ndarray,
+    sentiment_scores: np.ndarray,
+    bin_seconds: float,
+) -> float:
+    df = velocity_per_bin(timestamps, sentiment_scores, bin_seconds=bin_seconds)
+    v = df["velocity"].dropna()
+    if v.empty:
+        return float("nan")
+    return float(v.abs().mean())

@@ -20,6 +20,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from nlp.dataset import (  # noqa: E402
     add_weak_labels,
+    apply_label_source,
     default_db_path,
     load_comments_dataframe,
     split_meta_dict,
@@ -79,6 +80,11 @@ def main() -> int:
         type=Path,
         default=PROJECT_ROOT / "sentiment_models" / "lstm",
     )
+    ap.add_argument(
+        "--label-source",
+        choices=("weak", "gold", "hybrid"),
+        default="weak",
+    )
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
@@ -102,27 +108,29 @@ def main() -> int:
         test_fraction=args.test_fraction,
         random_state=args.seed,
     )
-    if tr.empty:
-        logger.error("Train split empty.")
+    tr_f = apply_label_source(tr, args.label_source)
+    if tr_f.empty:
+        logger.error("Train split empty after label-source filter.")
         return 1
 
-    texts_tr = tr["raw_text"].astype(str).tolist()
+    texts_tr = tr_f["raw_text"].astype(str).tolist()
     stoi, _ = build_vocab(texts_tr)
     vocab_size = len(stoi)
 
     def enc(series):
         return encode_texts(series.astype(str).tolist(), stoi, args.max_len)
 
-    x_tr = torch.tensor(enc(tr["raw_text"]), dtype=torch.long)
-    y_tr = torch.tensor(tr["label"].to_numpy(), dtype=torch.long)
+    x_tr = torch.tensor(enc(tr_f["raw_text"]), dtype=torch.long)
+    y_tr = torch.tensor(tr_f["label"].to_numpy(), dtype=torch.long)
     train_loader = DataLoader(
         TensorDataset(x_tr, y_tr), batch_size=args.batch_size, shuffle=True
     )
 
     va_loader = None
-    if not va.empty:
-        x_va = torch.tensor(enc(va["raw_text"]), dtype=torch.long)
-        y_va = torch.tensor(va["label"].to_numpy(), dtype=torch.long)
+    va_f = apply_label_source(va, args.label_source)
+    if not va_f.empty:
+        x_va = torch.tensor(enc(va_f["raw_text"]), dtype=torch.long)
+        y_va = torch.tensor(va_f["label"].to_numpy(), dtype=torch.long)
         va_loader = DataLoader(
             TensorDataset(x_va, y_va), batch_size=args.batch_size, shuffle=False
         )
@@ -189,8 +197,9 @@ def main() -> int:
             "f1_micro": float(f1_score(y_np, p, average="micro", zero_division=0)),
         }
 
-    x_te = enc(te["raw_text"]) if not te.empty else np.zeros((0, args.max_len), dtype=np.int64)
-    y_te = te["label"].to_numpy() if not te.empty else np.zeros(0, dtype=np.int64)
+    te_f = apply_label_source(te, args.label_source)
+    x_te = enc(te_f["raw_text"]) if not te_f.empty else np.zeros((0, args.max_len), dtype=np.int64)
+    y_te = te_f["label"].to_numpy() if not te_f.empty else np.zeros(0, dtype=np.int64)
     metrics = {
         "test": eval_tensor(x_te, y_te),
         "split": split_meta_dict(
@@ -204,6 +213,7 @@ def main() -> int:
         ),
         "max_len": args.max_len,
         "vocab_size": vocab_size,
+        "label_source": args.label_source,
     }
     (args.save_dir / "lstm_metrics.json").write_text(
         json.dumps(metrics, indent=2), encoding="utf-8"

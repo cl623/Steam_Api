@@ -23,3 +23,11 @@ def test_parse_forum_thread_minimal():
     ids = {p.comment_id for p in posts}
     assert "1001" in ids and "1002" in ids
     assert "clutch" in posts[0].raw_text.lower() or "clutch" in posts[1].raw_text.lower()
+
+
+def test_parse_forum_thread_postrow_table():
+    html = (_FIX / "hltv_forum_postrow.html").read_text(encoding="utf-8")
+    posts = parse_forum_thread_html(html, 42)
+    assert len(posts) == 2
+    ids = {p.comment_id for p in posts}
+    assert "88001" in ids and "88002" in ids
