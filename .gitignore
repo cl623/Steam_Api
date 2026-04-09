@@ -35,6 +35,8 @@ comparison_output/
 backtest_output/
 course_outputs/
 course_eval/
+sentiment_eval/
+sentiment_models/
 
 # Data directory (local DB and collected data)
 data/

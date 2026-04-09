@@ -1,0 +1,143 @@
+#!/usr/bin/env python
+"""Train sklearn MultinomialNB sentiment baselines (weak labels from nlp.weak_labels)."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import sys
+from pathlib import Path
+
+import joblib
+import numpy as np
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.metrics import classification_report, confusion_matrix, f1_score
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.pipeline import Pipeline
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from nlp.dataset import (  # noqa: E402
+    add_weak_labels,
+    default_db_path,
+    load_comments_dataframe,
+    split_meta_dict,
+    train_val_test_split,
+)
+
+logger = logging.getLogger("train_sentiment_nb")
+
+
+def build_pipeline(ngram: str, max_features: int) -> Pipeline:
+    from nlp.vectorizer_utils import count_vectorizer_analyzer
+    if ngram == "unigram":
+        nr = (1, 1)
+    elif ngram == "bigram":
+        nr = (1, 2)
+    else:
+        raise ValueError("ngram must be unigram or bigram")
+    return Pipeline(
+        [
+            (
+                "vec",
+                CountVectorizer(
+                    analyzer=count_vectorizer_analyzer,
+                    ngram_range=nr,
+                    min_df=1,
+                    max_features=max_features,
+                ),
+            ),
+            ("clf", MultinomialNB()),
+        ]
+    )
+
+
+def main() -> int:
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--db", type=Path, default=None)
+    ap.add_argument("--ngram", choices=("unigram", "bigram"), default="unigram")
+    ap.add_argument("--split-mode", choices=("random", "by_match", "by_time"), default="by_match")
+    ap.add_argument("--val-fraction", type=float, default=0.15)
+    ap.add_argument("--test-fraction", type=float, default=0.15)
+    ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--max-features", type=int, default=50_000)
+    ap.add_argument(
+        "--save-dir",
+        type=Path,
+        default=PROJECT_ROOT / "sentiment_models" / "nb",
+    )
+    args = ap.parse_args()
+
+    db_path = args.db or default_db_path()
+    if not db_path.is_file():
+        logger.error("Database not found: %s — run collector first.", db_path)
+        return 1
+
+    raw = load_comments_dataframe(db_path, limit=args.limit)
+    if raw.empty:
+        logger.error("No comments in DB.")
+        return 1
+    df = add_weak_labels(raw)
+    tr, va, te = train_val_test_split(
+        df,
+        mode=args.split_mode,
+        val_fraction=args.val_fraction,
+        test_fraction=args.test_fraction,
+        random_state=args.seed,
+    )
+    if tr.empty:
+        logger.error("Train split empty — need more matches/comments.")
+        return 1
+
+    pipe = build_pipeline(args.ngram, args.max_features)
+    x_tr, y_tr = tr["raw_text"].astype(str), tr["label"].to_numpy()
+    pipe.fit(x_tr, y_tr)
+
+    def eval_split(name: str, part) -> dict:
+        if part.empty:
+            return {"n": 0}
+        y_true = part["label"].to_numpy()
+        y_pred = pipe.predict(part["raw_text"].astype(str))
+        return {
+            "n": int(len(part)),
+            "f1_macro": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
+            "f1_micro": float(f1_score(y_true, y_pred, average="micro", zero_division=0)),
+            "confusion_matrix": confusion_matrix(y_true, y_pred, labels=[0, 1, 2]).tolist(),
+            "report": classification_report(
+                y_true, y_pred, labels=[0, 1, 2], target_names=["neg", "neu", "pos"], zero_division=0
+            ),
+        }
+
+    metrics = {
+        "train": eval_split("train", tr),
+        "val": eval_split("val", va),
+        "test": eval_split("test", te),
+        "split": split_meta_dict(
+            args.split_mode,
+            args.val_fraction,
+            args.test_fraction,
+            args.seed,
+            len(tr),
+            len(va),
+            len(te),
+        ),
+        "ngram": args.ngram,
+    }
+
+    args.save_dir.mkdir(parents=True, exist_ok=True)
+    model_path = args.save_dir / f"nb_{args.ngram}.joblib"
+    joblib.dump(pipe, model_path)
+    meta_path = args.save_dir / f"nb_{args.ngram}_metrics.json"
+    meta_path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+    logger.info("Saved model %s", model_path)
+    logger.info("Metrics written %s", meta_path)
+    print(metrics["test"].get("report", ""))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
