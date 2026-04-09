@@ -31,11 +31,15 @@ logger = logging.getLogger("train_sentiment_nb")
 
 
 def build_pipeline(ngram: str, max_features: int) -> Pipeline:
-    from nlp.vectorizer_utils import count_vectorizer_analyzer
+    from nlp.vectorizer_utils import (
+        count_vectorizer_analyzer_bigram,
+        count_vectorizer_analyzer_unigram,
+    )
+
     if ngram == "unigram":
-        nr = (1, 1)
+        analyzer = count_vectorizer_analyzer_unigram
     elif ngram == "bigram":
-        nr = (1, 2)
+        analyzer = count_vectorizer_analyzer_bigram
     else:
         raise ValueError("ngram must be unigram or bigram")
     return Pipeline(
@@ -43,8 +47,7 @@ def build_pipeline(ngram: str, max_features: int) -> Pipeline:
             (
                 "vec",
                 CountVectorizer(
-                    analyzer=count_vectorizer_analyzer,
-                    ngram_range=nr,
+                    analyzer=analyzer,
                     min_df=1,
                     max_features=max_features,
                 ),
