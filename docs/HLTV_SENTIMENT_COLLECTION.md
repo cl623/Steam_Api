@@ -80,3 +80,30 @@ Optional JSONL field `gold_label` is applied on import via [`collector/hltv_comm
 ### C) Momentum / velocity report
 
 [`scripts/eval_sentiment_momentum.py`](scripts/eval_sentiment_momentum.py) aggregates per-match velocity bins (`--bin-seconds`) and lag correlations (`--lag-steps`, comment-index offsets) against the scoreline swing proxy. Output: `sentiment_eval/momentum_report.json`.
+
+## Time-sync workflow (pre/during/post)
+
+To avoid mixing pre/post chatter into in-match velocity:
+
+1. Ensure schema includes `match_start_unix` and `match_end_unix`:
+
+   `python scripts/migrate_hltv_sentiment_db.py`
+
+2. Ingest data (HTML/JSONL paths above).
+3. Validate timing quality:
+
+   `python scripts/validate_time_sync.py`
+
+4. Train NB with optional pre-match prior:
+
+   `python scripts/train_sentiment_nb.py --use-pre-match-prior --split-mode by_match`
+
+5. Run momentum eval using only in-match comments:
+
+   `python scripts/eval_sentiment_momentum.py --phase during --time-axis seconds`
+
+If second-level timestamps are weak/missing, use round-bin fallback:
+
+`python scripts/eval_sentiment_momentum.py --phase during --time-axis round_bin`
+
+When using fallback, explicitly state in your report that timing was synchronized by score-context round progression rather than absolute seconds.

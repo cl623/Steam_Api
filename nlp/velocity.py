@@ -74,6 +74,26 @@ def velocity_per_bin(
 _SCORE_PAIR = re.compile(r"(\d+)\s*[-:]\s*(\d+)")
 
 
+def parse_score_pair(score_context: str) -> Optional[tuple[int, int]]:
+    if not score_context or not isinstance(score_context, str):
+        return None
+    m = _SCORE_PAIR.search(score_context.replace(";", " "))
+    if not m:
+        return None
+    return int(m.group(1)), int(m.group(2))
+
+
+def score_context_round_index(score_context: str) -> Optional[int]:
+    """
+    Round proxy from scoreline: total rounds played so far.
+    Example: 14-12 -> 26.
+    """
+    p = parse_score_pair(score_context)
+    if p is None:
+        return None
+    return int(p[0] + p[1])
+
+
 def parse_round_differential(score_context: str) -> Optional[float]:
     """
     Best-effort parse '14-12' or '16:14' style into team1 - team2.
@@ -81,10 +101,10 @@ def parse_round_differential(score_context: str) -> Optional[float]:
     """
     if not score_context or not isinstance(score_context, str):
         return None
-    m = _SCORE_PAIR.search(score_context.replace(";", " "))
-    if not m:
+    p = parse_score_pair(score_context)
+    if p is None:
         return None
-    a, b = int(m.group(1)), int(m.group(2))
+    a, b = p
     return float(a - b)
 
 

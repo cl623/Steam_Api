@@ -13,7 +13,6 @@ Usage::
 from __future__ import annotations
 
 import argparse
-import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -37,6 +36,8 @@ def migrate(db_path: Path) -> None:
                 team2_name TEXT,
                 event_name TEXT,
                 match_date_unix INTEGER,
+                match_start_unix INTEGER,
+                match_end_unix INTEGER,
                 status_hint TEXT,
                 score_summary TEXT,
                 forum_thread_url TEXT,
@@ -75,10 +76,21 @@ def migrate(db_path: Path) -> None:
             """
         )
         conn.commit()
+        _upgrade_hltv_matches_time_bounds(conn)
         _upgrade_comments_gold_column(conn)
         conn.commit()
     finally:
         conn.close()
+
+
+def _upgrade_hltv_matches_time_bounds(conn: sqlite3.Connection) -> None:
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(hltv_matches)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "match_start_unix" not in cols:
+        cur.execute("ALTER TABLE hltv_matches ADD COLUMN match_start_unix INTEGER")
+    if "match_end_unix" not in cols:
+        cur.execute("ALTER TABLE hltv_matches ADD COLUMN match_end_unix INTEGER")
 
 
 def _upgrade_comments_gold_column(conn: sqlite3.Connection) -> None:
