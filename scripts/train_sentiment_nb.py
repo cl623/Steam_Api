@@ -31,7 +31,9 @@ from nlp.dataset import (  # noqa: E402
 logger = logging.getLogger("train_sentiment_nb")
 
 
-def build_pipeline(ngram: str, max_features: int) -> Pipeline:
+def build_pipeline(
+    ngram: str, max_features: int, class_prior: np.ndarray | None = None
+) -> Pipeline:
     from nlp.vectorizer_utils import (
         count_vectorizer_analyzer_bigram,
         count_vectorizer_analyzer_unigram,
@@ -53,7 +55,13 @@ def build_pipeline(ngram: str, max_features: int) -> Pipeline:
                     max_features=max_features,
                 ),
             ),
-            ("clf", MultinomialNB()),
+            (
+                "clf",
+                MultinomialNB(
+                    class_prior=class_prior,
+                    fit_prior=False if class_prior is not None else True,
+                ),
+            ),
         ]
     )
 
@@ -79,6 +87,11 @@ def main() -> int:
         choices=("weak", "gold", "hybrid"),
         default="weak",
         help="weak=lexicon; gold=only hand-labeled rows; hybrid=gold else weak",
+    )
+    ap.add_argument(
+        "--use-pre-match-prior",
+        action="store_true",
+        help="Estimate NB class prior from pre-match comments in train split.",
     )
     args = ap.parse_args()
 
@@ -107,7 +120,24 @@ def main() -> int:
         )
         return 1
 
-    pipe = build_pipeline(args.ngram, args.max_features)
+    class_prior = None
+    if args.use_pre_match_prior:
+        if "comment_phase" in tr.columns:
+            pre = tr[tr["comment_phase"] == "pre"].copy()
+        else:
+            pre = tr.iloc[:0].copy()
+        pre_f = apply_label_source(pre, args.label_source) if not pre.empty else pre
+        if not pre_f.empty:
+            y_pre = pre_f["label"].to_numpy().astype(int)
+            counts = np.bincount(y_pre, minlength=3).astype(float)
+            if counts.sum() > 0:
+                class_prior = counts / counts.sum()
+        if class_prior is None:
+            logger.warning(
+                "No usable pre-match rows for class prior; falling back to fit_prior=True"
+            )
+
+    pipe = build_pipeline(args.ngram, args.max_features, class_prior=class_prior)
     x_tr, y_tr = tr_f["raw_text"].astype(str), tr_f["label"].to_numpy()
     pipe.fit(x_tr, y_tr)
 
@@ -144,6 +174,8 @@ def main() -> int:
         ),
         "ngram": args.ngram,
         "label_source": args.label_source,
+        "use_pre_match_prior": bool(args.use_pre_match_prior),
+        "pre_match_class_prior": class_prior.tolist() if class_prior is not None else None,
     }
 
     args.save_dir.mkdir(parents=True, exist_ok=True)

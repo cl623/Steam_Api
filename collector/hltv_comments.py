@@ -50,6 +50,8 @@ class MatchMeta:
     team2_name: Optional[str] = None
     event_name: Optional[str] = None
     match_date_unix: Optional[int] = None
+    match_start_unix: Optional[int] = None
+    match_end_unix: Optional[int] = None
     status_hint: Optional[str] = None
     score_summary: Optional[str] = None
     forum_thread_url: Optional[str] = None
@@ -112,6 +114,34 @@ def parse_match_page(html: str, match_id: int, source_url: str) -> MatchMeta:
         except (TypeError, ValueError):
             pass
 
+    match_start_unix = None
+    match_end_unix = None
+    start_el = soup.select_one(
+        "[data-match-start-unix], .match-start [data-unix], .matchStart [data-unix]"
+    )
+    if start_el is not None:
+        raw = (
+            start_el.get("data-match-start-unix")
+            or start_el.get("data-unix")
+            or ""
+        )
+        try:
+            x = int(raw)
+            match_start_unix = x // 1000 if x > 10**11 else x
+        except (TypeError, ValueError):
+            pass
+
+    end_el = soup.select_one(
+        "[data-match-end-unix], .match-end [data-unix], .matchEnd [data-unix]"
+    )
+    if end_el is not None:
+        raw = end_el.get("data-match-end-unix") or end_el.get("data-unix") or ""
+        try:
+            x = int(raw)
+            match_end_unix = x // 1000 if x > 10**11 else x
+        except (TypeError, ValueError):
+            pass
+
     t1 = soup.select_one(".team1-gradient .teamName")
     t2 = soup.select_one(".team2-gradient .teamName")
     team1_name = _text(t1) if t1 else None
@@ -145,6 +175,8 @@ def parse_match_page(html: str, match_id: int, source_url: str) -> MatchMeta:
         team2_name=team2_name,
         event_name=event_name,
         match_date_unix=match_date_unix,
+        match_start_unix=match_start_unix,
+        match_end_unix=match_end_unix,
         status_hint=status_hint,
         score_summary=score_summary,
         forum_thread_url=forum_thread_url,
@@ -286,15 +318,18 @@ def upsert_match(conn: sqlite3.Connection, meta: MatchMeta) -> None:
         """
         INSERT INTO hltv_matches (
             match_id, title, team1_name, team2_name, event_name,
-            match_date_unix, status_hint, score_summary, forum_thread_url,
+            match_date_unix, match_start_unix, match_end_unix,
+            status_hint, score_summary, forum_thread_url,
             source_match_url, updated_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?, datetime('now'))
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?, datetime('now'))
         ON CONFLICT(match_id) DO UPDATE SET
             title=excluded.title,
             team1_name=excluded.team1_name,
             team2_name=excluded.team2_name,
             event_name=excluded.event_name,
             match_date_unix=excluded.match_date_unix,
+            match_start_unix=COALESCE(excluded.match_start_unix, hltv_matches.match_start_unix),
+            match_end_unix=COALESCE(excluded.match_end_unix, hltv_matches.match_end_unix),
             status_hint=excluded.status_hint,
             score_summary=excluded.score_summary,
             forum_thread_url=excluded.forum_thread_url,
@@ -308,6 +343,8 @@ def upsert_match(conn: sqlite3.Connection, meta: MatchMeta) -> None:
             meta.team2_name,
             meta.event_name,
             meta.match_date_unix,
+            meta.match_start_unix,
+            meta.match_end_unix,
             meta.status_hint,
             meta.score_summary,
             meta.forum_thread_url,

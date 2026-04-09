@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 
 from .preprocess import clean_text
+from .time_windows import add_comment_phase
 from .weak_labels import label_to_id, weak_sentiment_label
 
 SplitMode = Literal["random", "by_match", "by_time"]
@@ -28,19 +29,32 @@ def load_comments_dataframe(
     *,
     min_chars: int = 2,
     limit: Optional[int] = None,
+    include_match_windows: bool = True,
 ) -> pd.DataFrame:
     """Return raw_text, match_id, posted_at_unix, score_context, comment_id."""
-    q = """
-        SELECT c.match_id, c.comment_id, c.raw_text, c.posted_at_unix, c.score_context,
-               c.gold_label
-        FROM hltv_comments c
-        WHERE LENGTH(TRIM(c.raw_text)) >= ?
-        ORDER BY c.match_id, c.posted_at_unix, c.comment_id
-    """
+    if include_match_windows:
+        q = """
+            SELECT c.match_id, c.comment_id, c.raw_text, c.posted_at_unix, c.score_context,
+                   c.gold_label, m.match_start_unix, m.match_end_unix, m.match_date_unix
+            FROM hltv_comments c
+            LEFT JOIN hltv_matches m ON m.match_id = c.match_id
+            WHERE LENGTH(TRIM(c.raw_text)) >= ?
+            ORDER BY c.match_id, c.posted_at_unix, c.comment_id
+        """
+    else:
+        q = """
+            SELECT c.match_id, c.comment_id, c.raw_text, c.posted_at_unix, c.score_context,
+                   c.gold_label
+            FROM hltv_comments c
+            WHERE LENGTH(TRIM(c.raw_text)) >= ?
+            ORDER BY c.match_id, c.posted_at_unix, c.comment_id
+        """
     with sqlite3.connect(str(db_path)) as conn:
         df = pd.read_sql_query(q, conn, params=(min_chars,))
     if limit is not None:
         df = df.head(limit)
+    if include_match_windows:
+        df = add_comment_phase(df)
     return df
 
 

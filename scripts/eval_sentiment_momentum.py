@@ -23,9 +23,11 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from nlp.dataset import add_weak_labels, default_db_path, load_comments_dataframe  # noqa: E402
 from nlp.models_lstm import encode_texts, load_lstm_bundle  # noqa: E402
+from nlp.time_windows import add_comment_phase  # noqa: E402
 from nlp.velocity import (  # noqa: E402
     lag_shift_correlation,
     mean_abs_velocity,
+    score_context_round_index,
     scores_from_probs,
     swing_labels_from_context,
 )
@@ -67,6 +69,23 @@ def main() -> int:
     ap.add_argument("--checkpoint", type=Path, default=None)
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument(
+        "--phase",
+        choices=("during", "pre", "post", "all"),
+        default="during",
+        help="Comment phase to analyze (default: during).",
+    )
+    ap.add_argument(
+        "--allow-unknown-phase",
+        action="store_true",
+        help="Include comments with unknown phase classification.",
+    )
+    ap.add_argument(
+        "--time-axis",
+        choices=("seconds", "round_bin"),
+        default="seconds",
+        help="Use posted_at_unix or score_context-derived round bins.",
+    )
+    ap.add_argument(
         "--bin-seconds",
         type=str,
         default="60,120,180,300",
@@ -95,6 +114,19 @@ def main() -> int:
         logger.error("No comments")
         return 1
     df = add_weak_labels(raw)
+    if "comment_phase" not in df.columns:
+        df = add_comment_phase(df)
+
+    if args.phase != "all":
+        allowed = {args.phase}
+        if args.allow_unknown_phase:
+            allowed.add("unknown")
+        df = df[df["comment_phase"].isin(allowed)].copy()
+    elif not args.allow_unknown_phase:
+        df = df[df["comment_phase"] != "unknown"].copy()
+    if df.empty:
+        logger.error("No comments after phase filtering.")
+        return 1
     texts = df["raw_text"].astype(str).tolist()
 
     if args.model_type == "nb":
@@ -131,6 +163,18 @@ def main() -> int:
             na_position="last",
         )
         ts = g["posted_at_unix"].to_numpy(dtype=np.float64)
+        if args.time_axis == "round_bin":
+            round_idx = np.array(
+                [
+                    score_context_round_index(str(c) if c is not None else "")
+                    for c in g["score_context"].tolist()
+                ],
+                dtype=float,
+            )
+            # Fall back to index order when round parse fails entirely
+            if np.isfinite(round_idx).sum() == 0:
+                round_idx = np.arange(len(g), dtype=float)
+            ts = round_idx
         sc = g["_pred_score"].to_numpy(dtype=np.float64)
         ctx = g["score_context"].tolist()
         swings = swing_labels_from_context(
@@ -159,6 +203,9 @@ def main() -> int:
 
     summary = {
         "model_type": args.model_type,
+        "phase": args.phase,
+        "allow_unknown_phase": bool(args.allow_unknown_phase),
+        "time_axis": args.time_axis,
         "n_comments": int(len(df)),
         "n_matches_analyzed": len(per_match),
         "aggregate_mean_abs_velocity": {str(int(b)): _mean(agg_mabs[b]) for b in bins},
