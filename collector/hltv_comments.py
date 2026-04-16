@@ -41,6 +41,9 @@ CLOUDFLARE_MARKERS = (
     "Checking your browser",
 )
 
+ESTIMATED_MAP_MINUTES = 50
+ESTIMATED_MATCH_OVERHEAD_MINUTES = 10
+
 
 @dataclass
 class MatchMeta:
@@ -101,6 +104,24 @@ def _text(el) -> str:
     return " ".join(el.get_text(" ", strip=True).split())
 
 
+def _unix_from_attr(raw: Any) -> Optional[int]:
+    try:
+        x = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return x // 1000 if x > 10**11 else x
+
+
+def _count_played_maps(soup: BeautifulSoup) -> int:
+    played = 0
+    for holder in soup.select(".mapholder"):
+        s1 = _text(holder.select_one(".results-left .results-team-score"))
+        s2 = _text(holder.select_one(".results-right .results-team-score"))
+        if re.fullmatch(r"\d+", s1) and re.fullmatch(r"\d+", s2):
+            played += 1
+    return played
+
+
 def parse_match_page(html: str, match_id: int, source_url: str) -> MatchMeta:
     soup = BeautifulSoup(html, "html.parser")
     title = _text(soup.select_one(".timeAndEvent .text"))
@@ -109,15 +130,13 @@ def parse_match_page(html: str, match_id: int, source_url: str) -> MatchMeta:
     date_el = soup.select_one(".timeAndEvent .date")
     match_date_unix = None
     if date_el is not None and date_el.has_attr("data-unix"):
-        try:
-            match_date_unix = int(date_el["data-unix"]) // 1000
-        except (TypeError, ValueError):
-            pass
+        match_date_unix = _unix_from_attr(date_el.get("data-unix"))
 
     match_start_unix = None
     match_end_unix = None
     start_el = soup.select_one(
-        "[data-match-start-unix], .match-start [data-unix], .matchStart [data-unix]"
+        "[data-match-start-unix], .match-start [data-unix], .matchStart [data-unix], "
+        ".timeAndEvent .time[data-unix], .timeAndEvent .date[data-unix]"
     )
     if start_el is not None:
         raw = (
@@ -125,22 +144,14 @@ def parse_match_page(html: str, match_id: int, source_url: str) -> MatchMeta:
             or start_el.get("data-unix")
             or ""
         )
-        try:
-            x = int(raw)
-            match_start_unix = x // 1000 if x > 10**11 else x
-        except (TypeError, ValueError):
-            pass
+        match_start_unix = _unix_from_attr(raw)
 
     end_el = soup.select_one(
         "[data-match-end-unix], .match-end [data-unix], .matchEnd [data-unix]"
     )
     if end_el is not None:
         raw = end_el.get("data-match-end-unix") or end_el.get("data-unix") or ""
-        try:
-            x = int(raw)
-            match_end_unix = x // 1000 if x > 10**11 else x
-        except (TypeError, ValueError):
-            pass
+        match_end_unix = _unix_from_attr(raw)
 
     t1 = soup.select_one(".team1-gradient .teamName")
     t2 = soup.select_one(".team2-gradient .teamName")
@@ -161,12 +172,36 @@ def parse_match_page(html: str, match_id: int, source_url: str) -> MatchMeta:
             score_bits.append(f"{mname}:{_text(s1)}-{_text(s2)}")
     score_summary = "; ".join(score_bits) if score_bits else None
 
+    if match_start_unix is not None and match_end_unix is None:
+        maps_played = _count_played_maps(soup)
+        if maps_played > 0:
+            est_minutes = (
+                maps_played * ESTIMATED_MAP_MINUTES + ESTIMATED_MATCH_OVERHEAD_MINUTES
+            )
+            match_end_unix = match_start_unix + est_minutes * 60
+
     forum_thread_url = None
-    for a in soup.select('a[href*="/forums/threads/"]'):
-        href = a.get("href") or ""
-        if "/forums/threads/" in href:
-            forum_thread_url = urljoin(HLTV_ORIGIN, href)
-            break
+    match_comments = soup.select_one(".match-comments")
+    if match_comments is not None:
+        fo = match_comments.select_one(".forum[data-forum-thread-id]")
+        if fo is not None and fo.has_attr("data-forum-thread-id"):
+            try:
+                tid = int(fo["data-forum-thread-id"])
+                forum_thread_url = f"{HLTV_ORIGIN}/forums/threads/{tid}"
+            except (TypeError, ValueError):
+                pass
+        if forum_thread_url is None:
+            for a in match_comments.select('a[href*="/forums/threads/"]'):
+                href = a.get("href") or ""
+                if "/forums/threads/" in href:
+                    forum_thread_url = urljoin(HLTV_ORIGIN, href)
+                    break
+    if forum_thread_url is None:
+        for a in soup.select('a[href*="/forums/threads/"]'):
+            href = a.get("href") or ""
+            if "/forums/threads/" in href:
+                forum_thread_url = urljoin(HLTV_ORIGIN, href)
+                break
 
     return MatchMeta(
         match_id=match_id,
@@ -192,10 +227,10 @@ def parse_forum_thread_html(html: str, match_id: int) -> list[ParsedComment]:
     soup = BeautifulSoup(html, "html.parser")
     posts: list[ParsedComment] = []
 
-    # Strategy A: div.post with id post-123
+    # Strategy A: div.post with id post-123 (forum thread) or r123 (match page embed)
     for div in soup.select("div.post"):
-        pid = div.get("id") or ""
-        m = re.match(r"post-(\d+)", pid)
+        pid = (div.get("id") or "").strip()
+        m = re.match(r"post-(\d+)$", pid) or re.match(r"r(\d+)$", pid)
         if not m:
             continue
         comment_id = m.group(1)
@@ -209,7 +244,9 @@ def parse_forum_thread_html(html: str, match_id: int) -> list[ParsedComment]:
                 except (TypeError, ValueError):
                     pass
                 break
-        body_el = div.select_one(".forum-content, .content, .post-body, .postbody")
+        body_el = div.select_one(
+            ".forum-content, .forum-middle, .content, .post-body, .postbody"
+        )
         raw_text = _text(body_el) if body_el else _text(div)
         if not raw_text:
             continue
@@ -465,6 +502,7 @@ def scrape_match_and_comments(
     n_comments = 0
     run_id: Optional[int] = None
     thread_url: Optional[str] = None
+    html: Optional[str] = None
 
     conn = sqlite3.connect(str(db_path))
     try:
@@ -506,6 +544,9 @@ def scrape_match_and_comments(
             fh = fetch_text(thread_url, session)
             time.sleep(min_delay_s)
             comments.extend(parse_forum_thread_html(fh, match_id))
+        elif html is not None:
+            # Match pages often embed the discussion (div.post id="r…"); no extra fetch.
+            comments.extend(parse_forum_thread_html(html, match_id))
 
         if comments:
             n_comments = upsert_comments(conn, match_id, comments, thread_url)

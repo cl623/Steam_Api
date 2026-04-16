@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}FAQ | SteamScope{% endblock %}
+{% block content %}
+<div class="container page-shell">
+    <section class="hero-panel mb-4">
+        <p class="hero-kicker mb-2">FAQ</p>
+        <h1 class="hero-title">Frequently asked questions</h1>
+        <p class="hero-subtitle mb-0">
+            Quick answers for common user questions around discovery, charts, and account setup.
+        </p>
+    </section>
+
+    <div class="accordion" id="faqAccordion">
+        <div class="accordion-item">
+            <h2 class="accordion-header" id="faqOne">
+                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#faqOneBody">
+                    Why is search emphasized over charts?
+                </button>
+            </h2>
+            <div id="faqOneBody" class="accordion-collapse collapse show" data-bs-parent="#faqAccordion">
+                <div class="accordion-body">
+                    Most users arrive with specific item intent. Search and popularity signals help them reach the right item faster.
+                </div>
+            </div>
+        </div>
+        <div class="accordion-item">
+            <h2 class="accordion-header" id="faqTwo">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faqTwoBody">
+                    Is price history still available?
+                </button>
+            </h2>
+            <div id="faqTwoBody" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                <div class="accordion-body">
+                    Yes. Price history is still available from item actions and cart-level analysis; it is now visually secondary to discovery.
+                </div>
+            </div>
+        </div>
+        <div class="accordion-item">
+            <h2 class="accordion-header" id="faqThree">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faqThreeBody">
+                    What do I need for Steam data access?
+                </button>
+            </h2>
+            <div id="faqThreeBody" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                <div class="accordion-body">
+                    Configure valid Steam community cookies in Settings. If requests fail, verify account market eligibility and Steam Guard status.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

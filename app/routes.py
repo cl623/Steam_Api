@@ -51,7 +51,8 @@ def index():
                              error=f"Failed to fetch data. Status code: {response.status_code if response else 'No response'}",
                              games=GAMES,
                              selected_game=selected_game,
-                             cart_item_names=cart_item_names)
+                             cart_item_names=cart_item_names,
+                             active_page='market')
 
     data = response.json()
     results = data.get('results', [])
@@ -124,7 +125,8 @@ def index():
         games=GAMES,
         selected_game=selected_game,
         cart_item_names=cart_item_names,
-        dark_mode=dark_mode
+        dark_mode=dark_mode,
+        active_page='market'
     )
 
 @bp.route('/add_to_cart', methods=['POST'])
@@ -217,14 +219,16 @@ def view_cart():
                              cart_items=cart_items,
                              total_price=total_price,
                              games=GAMES,
-                             dark_mode=dark_mode)
+                             dark_mode=dark_mode,
+                             active_page='cart')
     except Exception as e:
         print(f"Error in view_cart: {str(e)}")
         return render_template('cart.html', 
                              error=str(e),
                              cart_items=[],
                              total_price=0,
-                             games=GAMES)
+                             games=GAMES,
+                             active_page='cart')
 
 @bp.route('/clear_cart', methods=['POST'])
 def clear_cart():
@@ -738,4 +742,38 @@ def settings():
                          steamapis_key=current_api_key,
                          dark_mode=dark_mode,
                          saved=saved,
-                         games=GAMES)
+                         games=GAMES,
+                         active_page='settings')
+
+@bp.route('/about')
+def about():
+    """Visibility page: About"""
+    dark_mode = session.get('dark_mode', False)
+    return render_template(
+        'about.html',
+        dark_mode=dark_mode,
+        games=GAMES,
+        active_page='about'
+    )
+
+@bp.route('/portfolio')
+def portfolio():
+    """Visibility page: Portfolio / case studies"""
+    dark_mode = session.get('dark_mode', False)
+    return render_template(
+        'portfolio.html',
+        dark_mode=dark_mode,
+        games=GAMES,
+        active_page='portfolio'
+    )
+
+@bp.route('/faq')
+def faq():
+    """Visibility page: FAQ"""
+    dark_mode = session.get('dark_mode', False)
+    return render_template(
+        'faq.html',
+        dark_mode=dark_mode,
+        games=GAMES,
+        active_page='faq'
+    )

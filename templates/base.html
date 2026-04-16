@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en" {% if dark_mode %}class="dark-mode"{% endif %}>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Steam Market{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block head_extra %}{% endblock %}
+</head>
+<body {% if dark_mode %}class="dark-mode"{% endif %}>
+    <header class="top-nav-wrap sticky-top">
+        <nav class="navbar navbar-expand-lg app-navbar">
+            <div class="container">
+                <a class="navbar-brand app-brand" href="{{ url_for('main.index') }}">
+                    <i class="bi bi-steam"></i> SteamScope
+                </a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavbar">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="collapse navbar-collapse" id="mainNavbar">
+                    <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                        <li class="nav-item"><a class="nav-link {% if active_page == 'market' %}active{% endif %}" href="{{ url_for('main.index') }}">Market</a></li>
+                        <li class="nav-item"><a class="nav-link {% if active_page == 'about' %}active{% endif %}" href="{{ url_for('main.about') }}">About</a></li>
+                        <li class="nav-item"><a class="nav-link {% if active_page == 'portfolio' %}active{% endif %}" href="{{ url_for('main.portfolio') }}">Portfolio</a></li>
+                        <li class="nav-item"><a class="nav-link {% if active_page == 'faq' %}active{% endif %}" href="{{ url_for('main.faq') }}">FAQ</a></li>
+                    </ul>
+                    <div class="d-flex align-items-center gap-2 app-nav-actions">
+                        <a href="{{ url_for('main.settings') }}" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-gear"></i> Settings
+                        </a>
+                        <a href="{{ url_for('main.view_cart') }}" class="btn btn-sm btn-primary position-relative">
+                            <i class="bi bi-cart"></i> Cart
+                            <span id="globalCartCount" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                                {{ session.get('cart', [])|length }}
+                            </span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main class="app-main">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="app-footer">
+        <div class="container d-flex justify-content-between flex-wrap gap-2">
+            <small>SteamScope UI refresh for search-first item discovery.</small>
+            <small><a href="{{ url_for('main.faq') }}">Need help?</a></small>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

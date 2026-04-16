@@ -1,93 +1,85 @@
-<!DOCTYPE html>
-<html lang="en" {% if session.get('dark_mode') %}class="dark-mode"{% endif %}>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ games[selected_game] }} Steam Market Listings</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body {% if session.get('dark_mode') %}class="dark-mode"{% endif %}>
-    <div class="container mt-5">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1>{{ games[selected_game] }} Steam Market Listings</h1>
-            <div>
-                <a href="{{ url_for('settings') }}" class="btn btn-outline-secondary me-2">
-                    <i class="bi bi-gear"></i> Settings
-                </a>
-                <a href="{{ url_for('view_cart') }}" class="btn btn-outline-primary position-relative">
-                    <i class="bi bi-cart"></i> Cart
-                    <span id="cartCount" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
-                        {{ session.get('cart', [])|length }}
-                    </span>
-                </a>
-            </div>
-        </div>
+{% extends "base.html" %}
+{% block title %}{{ games[selected_game] }} Market | SteamScope{% endblock %}
+{% block content %}
+    <div class="container page-shell">
+        <section class="hero-panel mb-4">
+            <p class="hero-kicker mb-2">Find what you want fast</p>
+            <h1 class="hero-title">{{ games[selected_game] }} Market Explorer</h1>
+            <p class="hero-subtitle mb-0">
+                Search by item name first, then sort by popularity or price. Price charts are available when you want deeper analysis.
+            </p>
+        </section>
         
-        <!-- Add search form -->
-        <form method="get" class="search-container">
-            <div class="row g-3 align-items-center">
-                <div class="col-auto">
+        <form method="get" class="search-shell mb-3">
+            <div class="row g-2 align-items-end">
+                <div class="col-lg-3">
+                    <label class="form-label">Game</label>
                     <select name="game" class="form-select" onchange="this.form.submit()">
                         {% for game_id, game_name in games.items() %}
                             <option value="{{ game_id }}" {% if game_id == selected_game %}selected{% endif %}>{{ game_name }}</option>
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col-auto">
-                    <input type="text" class="form-control" name="search" placeholder="Search items..." value="{{ search_query }}">
+                <div class="col-lg-5">
+                    <label class="form-label">Item search</label>
+                    <input type="text" class="form-control" name="search" placeholder="Search by item name (e.g. Karambit, Dragon Lore, Case)" value="{{ search_query }}">
                 </div>
-                <div class="col-auto">
-                    <button type="submit" class="btn btn-primary">Search</button>
+                <div class="col-lg-2">
+                    <label class="form-label">Sort by</label>
+                    <select name="sort_by" class="form-select">
+                        <option value="item_name" {% if sort_by == 'item_name' %}selected{% endif %}>Name</option>
+                        <option value="quantity" {% if sort_by == 'quantity' %}selected{% endif %}>Popularity</option>
+                        <option value="price" {% if sort_by == 'price' %}selected{% endif %}>Price</option>
+                    </select>
                 </div>
-                {% if search_query %}
-                <div class="col-auto">
-                    <a href="{{ url_for('index', 
+                <div class="col-lg-2">
+                    <label class="form-label">Order</label>
+                    <select name="sort_order" class="form-select">
+                        <option value="desc" {% if sort_order == 'desc' %}selected{% endif %}>High to low</option>
+                        <option value="asc" {% if sort_order == 'asc' %}selected{% endif %}>Low to high</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row g-2 align-items-end mt-1">
+                <div class="col-lg-2">
+                    <label class="form-label">Min price</label>
+                    <input type="number" class="form-control" name="min_price" placeholder="0.00" value="{{ min_price }}" min="0" step="0.01">
+                </div>
+                <div class="col-lg-2">
+                    <label class="form-label">Max price</label>
+                    <input type="number" class="form-control" name="max_price" placeholder="No limit" value="{{ max_price }}" min="0" step="0.01">
+                </div>
+                <div class="col-lg-4">
+                    <div class="d-flex flex-wrap gap-3 search-toggles">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="filter_sell_listings" id="filter_sell_listings" {% if filter_sell_listings %}checked{% endif %}>
+                            <label class="form-check-label" for="filter_sell_listings">In stock only</label>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="filter_sell_price" id="filter_sell_price" {% if filter_sell_price %}checked{% endif %}>
+                            <label class="form-check-label" for="filter_sell_price">Price available</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-4 d-flex gap-2 justify-content-lg-end flex-wrap">
+                    <button type="submit" class="btn btn-primary flex-grow-1 flex-lg-grow-0">
+                        <i class="bi bi-search"></i> Search Items
+                    </button>
+                    <a href="{{ url_for('main.index', game=selected_game) }}" class="btn btn-outline-secondary flex-grow-1 flex-lg-grow-0">Reset</a>
+                </div>
+            </div>
+            {% if search_query %}
+                <div class="search-hint mt-3">
+                    Showing results for <strong>"{{ search_query }}"</strong>
+                    <a href="{{ url_for('main.index',
                         game=selected_game,
                         filter_sell_listings='on' if filter_sell_listings else 'off', 
                         filter_sell_price='on' if filter_sell_price else 'off', 
                         filter_sold_7_days='on' if filter_sold_7_days else 'off',
                         min_price=min_price,
-                        max_price=max_price) }}" 
-                        class="btn btn-outline-secondary">Clear Search</a>
+                        max_price=max_price) }}">Clear search</a>
                 </div>
-                {% endif %}
-            </div>
-        </form>
-
-        <!-- Add this after the search form -->
-        <div class="row g-3 align-items-center mb-3">
-            <div class="col-auto">
-                <a href="{{ url_for('index', game=selected_game) }}" class="btn btn-secondary">Reset All Filters</a>
-            </div>
-        </div>
-
-        <!-- Existing filter form -->
-        <form method="get" class="mb-3">
-            <input type="hidden" name="search" value="{{ request.args.get('search', '') }}">
-            <div class="form-check form-check-inline">
-                <input class="form-check-input" type="checkbox" name="filter_sell_listings" id="filter_sell_listings" {% if filter_sell_listings %}checked{% endif %}>
-                <label class="form-check-label" for="filter_sell_listings">Only show items with sell_listings &gt; 0</label>
-            </div>
-            <div class="form-check form-check-inline">
-                <input class="form-check-input" type="checkbox" name="filter_sell_price" id="filter_sell_price" {% if filter_sell_price %}checked{% endif %}>
-                <label class="form-check-label" for="filter_sell_price">Only show items with sell_price_text &gt; 0</label>
-            </div>
-            <div class="form-check form-check-inline">
-                <input class="form-check-input" type="checkbox" name="filter_sold_7_days" id="filter_sold_7_days" {% if filter_sold_7_days %}checked{% endif %}>
-                <label class="form-check-label" for="filter_sold_7_days">Only show items sold in last 7 days</label>
-            </div>
-            <div class="row g-3 align-items-center mb-3">
-                <div class="col-auto">
-                    <div class="input-group">
-                        <span class="input-group-text">$</span>
-                        <input type="number" class="form-control" name="min_price" placeholder="Min Price" value="{{ min_price }}" min="0" step="0.01">
-                        <span class="input-group-text">to</span>
-                        <input type="number" class="form-control" name="max_price" placeholder="Max Price" value="{{ max_price }}" min="0" step="0.01">
-                    </div>
-                </div>
-            </div>
-            <button type="submit" class="btn btn-primary btn-sm ms-2">Apply Filters</button>
+            {% endif %}
         </form>
 
         {% if error %}
@@ -103,23 +95,23 @@
         {% endif %}
 
         {% if listings %}
-        <div class="table-responsive">
-            <table class="table table-hover">
+        <div class="table-responsive app-table-wrap">
+            <table class="table table-hover align-middle">
                 <thead>
                     <tr>
                         <th>
-                            <a href="{{ url_for('index', sort_by='item_name', sort_order='asc' if sort_by != 'item_name' or sort_order == 'desc' else 'desc', search=request.args.get('search', ''), filter_sell_listings='on' if filter_sell_listings else 'off', filter_sell_price='on' if filter_sell_price else 'off', filter_sold_7_days='on' if filter_sold_7_days else 'off') }}">
+                            <a href="{{ url_for('main.index', sort_by='item_name', sort_order='asc' if sort_by != 'item_name' or sort_order == 'desc' else 'desc', search=request.args.get('search', ''), filter_sell_listings='on' if filter_sell_listings else 'off', filter_sell_price='on' if filter_sell_price else 'off', filter_sold_7_days='on' if filter_sold_7_days else 'off') }}">
                                 Item Name
                             </a>
                         </th>
                         <th>
-                            <a href="{{ url_for('index', sort_by='price', sort_order='asc' if sort_by != 'price' or sort_order == 'desc' else 'desc', search=request.args.get('search', ''), filter_sell_listings='on' if filter_sell_listings else 'off', filter_sell_price='on' if filter_sell_price else 'off', filter_sold_7_days='on' if filter_sold_7_days else 'off') }}">
+                            <a href="{{ url_for('main.index', sort_by='price', sort_order='asc' if sort_by != 'price' or sort_order == 'desc' else 'desc', search=request.args.get('search', ''), filter_sell_listings='on' if filter_sell_listings else 'off', filter_sell_price='on' if filter_sell_price else 'off', filter_sold_7_days='on' if filter_sold_7_days else 'off') }}">
                                 Price
                             </a>
                         </th>
                         <th>
-                            <a href="{{ url_for('index', sort_by='quantity', sort_order='asc' if sort_by != 'quantity' or sort_order == 'desc' else 'desc', search=request.args.get('search', ''), filter_sell_listings='on' if filter_sell_listings else 'off', filter_sell_price='on' if filter_sell_price else 'off', filter_sold_7_days='on' if filter_sold_7_days else 'off') }}">
-                                Quantity
+                            <a href="{{ url_for('main.index', sort_by='quantity', sort_order='asc' if sort_by != 'quantity' or sort_order == 'desc' else 'desc', search=request.args.get('search', ''), filter_sell_listings='on' if filter_sell_listings else 'off', filter_sell_price='on' if filter_sell_price else 'off', filter_sold_7_days='on' if filter_sold_7_days else 'off') }}">
+                                Popularity
                             </a>
                         </th>
                         <th>Action</th>
@@ -154,10 +146,10 @@
                                         <i class="bi bi-cart-plus"></i> Add to Cart
                                     {% endif %}
                                 </button>
-                                <button class="btn btn-sm btn-info view-price-history" 
+                                <button class="btn btn-sm btn-outline-secondary view-price-history" 
                                         data-market-hash-name="{{ item.market_hash_name }}"
                                         data-app-id="{{ selected_game }}">
-                                    <i class="bi bi-graph-up"></i> Price History
+                                    <i class="bi bi-graph-up"></i> View chart
                                 </button>
                             </td>
                         </tr>
@@ -186,13 +178,13 @@
             <ul class="pagination justify-content-center">
                 {% if page > 1 %}
                     <li class="page-item">
-                        <a class="page-link" href="{{ url_for('index', page=page-1, sort_by=sort_by, sort_order=sort_order, search=search_query, filter_sell_listings='on' if filter_sell_listings else 'off', filter_sell_price='on' if filter_sell_price else 'off', filter_sold_7_days='on' if filter_sold_7_days else 'off', min_price=min_price, max_price=max_price) }}">Previous</a>
+                        <a class="page-link" href="{{ url_for('main.index', page=page-1, sort_by=sort_by, sort_order=sort_order, search=search_query, filter_sell_listings='on' if filter_sell_listings else 'off', filter_sell_price='on' if filter_sell_price else 'off', filter_sold_7_days='on' if filter_sold_7_days else 'off', min_price=min_price, max_price=max_price) }}">Previous</a>
                     </li>
                 {% endif %}
                 
                 {% if has_more %}
                     <li class="page-item">
-                        <a class="page-link" href="{{ url_for('index', page=page+1, sort_by=sort_by, sort_order=sort_order, search=search_query, filter_sell_listings='on' if filter_sell_listings else 'off', filter_sell_price='on' if filter_sell_price else 'off', filter_sold_7_days='on' if filter_sold_7_days else 'off', min_price=min_price, max_price=max_price) }}">Next</a>
+                        <a class="page-link" href="{{ url_for('main.index', page=page+1, sort_by=sort_by, sort_order=sort_order, search=search_query, filter_sell_listings='on' if filter_sell_listings else 'off', filter_sell_price='on' if filter_sell_price else 'off', filter_sold_7_days='on' if filter_sold_7_days else 'off', min_price=min_price, max_price=max_price) }}">Next</a>
                     </li>
                 {% endif %}
             </ul>
@@ -204,8 +196,8 @@
         </div>
         {% endif %}
     </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+{% endblock %}
+{% block scripts %}
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -326,7 +318,7 @@
                                             ${data.suggestion ? `<p class="mb-0 mt-2"><strong>Suggestion:</strong> ${data.suggestion}</p>` : ''}
                                             ${requirementsHtml}
                                             <p class="mb-0 mt-2">
-                                                <a href="{{ url_for('settings') }}" class="btn btn-sm btn-primary me-2">
+                                                <a href="{{ url_for('main.settings') }}" class="btn btn-sm btn-primary me-2">
                                                     <i class="bi bi-gear"></i> Go to Settings
                                                 </a>
                                                 <a href="https://store.steampowered.com/account/" target="_blank" class="btn btn-sm btn-outline-primary">
@@ -485,5 +477,4 @@
             });
         });
     </script>
-</body>
-</html> 
+{% endblock %}

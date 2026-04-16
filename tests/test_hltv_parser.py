@@ -31,3 +31,22 @@ def test_parse_forum_thread_postrow_table():
     assert len(posts) == 2
     ids = {p.comment_id for p in posts}
     assert "88001" in ids and "88002" in ids
+
+
+def test_parse_match_page_estimates_end_from_start_and_maps():
+    html = (_FIX / "hltv_match_estimated_end.html").read_text(encoding="utf-8")
+    meta = parse_match_page(html, 999002, "https://example/matches/999002/x")
+    assert meta.match_start_unix == 1774780200
+    # 3 maps * 50 min + 10 min overhead = 160 min
+    assert meta.match_end_unix == 1774780200 + (160 * 60)
+
+
+def test_parse_match_page_embedded_forum_r_id():
+    html = (_FIX / "hltv_match_embedded_post.html").read_text(encoding="utf-8")
+    meta = parse_match_page(html, 555, "https://example/matches/555/x")
+    assert meta.forum_thread_url and "3120983" in meta.forum_thread_url
+    posts = parse_forum_thread_html(html, 555)
+    assert len(posts) == 1
+    assert posts[0].comment_id == "12345"
+    assert "Embedded match-page" in posts[0].raw_text
+    assert posts[0].posted_at_unix == 1700000007

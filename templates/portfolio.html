@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Portfolio | SteamScope{% endblock %}
+{% block content %}
+<div class="container page-shell">
+    <section class="hero-panel mb-4">
+        <p class="hero-kicker mb-2">Portfolio</p>
+        <h1 class="hero-title">Case-study highlights</h1>
+        <p class="hero-subtitle mb-0">
+            Examples of how search-first UX and cleaner visual hierarchy can improve product engagement.
+        </p>
+    </section>
+
+    <div class="row g-3">
+        <div class="col-lg-4">
+            <article class="card app-card h-100">
+                <div class="card-body">
+                    <h3 class="h5">Search-to-Action Flow</h3>
+                    <p><strong>Goal:</strong> Reduce friction for users with known item intent.</p>
+                    <p class="mb-0"><strong>Outcome:</strong> Streamlined query, sorting, and direct add-to-cart decisions.</p>
+                </div>
+            </article>
+        </div>
+        <div class="col-lg-4">
+            <article class="card app-card h-100">
+                <div class="card-body">
+                    <h3 class="h5">Popularity-first Listing Logic</h3>
+                    <p><strong>Goal:</strong> Make demand signals easy to scan.</p>
+                    <p class="mb-0"><strong>Outcome:</strong> Users compare liquidity and activity before deep analysis.</p>
+                </div>
+            </article>
+        </div>
+        <div class="col-lg-4">
+            <article class="card app-card h-100">
+                <div class="card-body">
+                    <h3 class="h5">Secondary Data Surface</h3>
+                    <p><strong>Goal:</strong> Keep charts accessible without overwhelming discovery.</p>
+                    <p class="mb-0"><strong>Outcome:</strong> Better focus for majority behavior with optional analyst depth.</p>
+                </div>
+            </article>
+        </div>
+    </div>
+</div>
+{% endblock %}

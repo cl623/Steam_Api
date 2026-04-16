@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}About | SteamScope{% endblock %}
+{% block content %}
+<div class="container page-shell">
+    <section class="hero-panel mb-4">
+        <p class="hero-kicker mb-2">About SteamScope</p>
+        <h1 class="hero-title">Search-first Steam market experience</h1>
+        <p class="hero-subtitle mb-0">
+            SteamScope helps users find items quickly, compare popularity signals, and inspect price history only when needed.
+        </p>
+    </section>
+
+    <div class="row g-3">
+        <div class="col-lg-4">
+            <div class="card app-card h-100">
+                <div class="card-body">
+                    <h3 class="h5">Fast Discovery</h3>
+                    <p class="mb-0">Prioritized search and relevance for users who know exactly which item they want.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card app-card h-100">
+                <div class="card-body">
+                    <h3 class="h5">Popularity Signals</h3>
+                    <p class="mb-0">Sortable listing activity and cleaner item cards make high-demand items easier to identify.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card app-card h-100">
+                <div class="card-body">
+                    <h3 class="h5">Data On Demand</h3>
+                    <p class="mb-0">Price-history charts are still available, but secondary to item discovery and action.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
