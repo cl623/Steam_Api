@@ -13,6 +13,7 @@ This folder is a **self-contained snapshot** for a second reviewer (human or LLM
 | `metrics/training_*.json` | Copies of `sentiment_models/**/_metrics.json` (includes `training_lstm_h64_metrics.json`). |
 | `REPRO_COMMANDS.md` | Full shell runbook copied from [`../REPRO_COMMANDS.md`](../REPRO_COMMANDS.md). |
 | `Verification_Version1.md` | External review notes that drove report v2 edits. |
+| `Verification_Version2.md` | Layout + classification P/R checklist (v2.1). |
 | `methodology_source/` | Copies of `nlp/*.py` and `scripts/*sentiment*.py` (and stats script) that define labels, splits, models, velocity, and momentum evaluation. |
 | `figures/` | Copies of PNGs embedded in the report (confusion matrices, dataset exploration, momentum plots, exemplar). |
 | `docs_HLTV_SENTIMENT_COLLECTION.md` | Copy of repo `docs/HLTV_SENTIMENT_COLLECTION.md` for ingest/ethics/commands cross-check against section 3.1. |
@@ -33,4 +34,4 @@ This folder is a **self-contained snapshot** for a second reviewer (human or LLM
 
 ## Bundle version
 
-**v2** (`feature/nlp-report-v2`): ACL/EMNLP-only related work, LSTM hidden-size ablation, shortened main report with commands externalized to `REPRO_COMMANDS.md`. Paths inside `methodology_source/` preserve original module layout (`nlp/...`, `scripts/...`) for clarity.
+**v2** (`feature/nlp-report-v2`): ACL/EMNLP-only related work, LSTM hidden-size ablation, shortened main report with commands externalized to `REPRO_COMMANDS.md`. **v2.1:** §5.2 precision/recall tables, §5.3 figure placement + scaled width, LaTeX `placeins` / `\FloatBarrier` before references, Pandoc `-f markdown+yaml_metadata_block+raw_attribute`. Paths inside `methodology_source/` preserve original module layout (`nlp/...`, `scripts/...`) for clarity.

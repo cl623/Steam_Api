@@ -1,3 +1,8 @@
+---
+header-includes: |
+  \usepackage{placeins}
+---
+
 # Evaluating temporal sentiment as a signal for momentum-like scoreline swings in CS2 match threads
 
 **Course:** DS680 — NLP final project  
@@ -10,6 +15,7 @@ We ask whether **time-binned sentiment velocity** from audience comments aligns 
 ## 1. Introduction
 
 Live match threads are short, slang-heavy, and only loosely tied to latent game state. We do **not** claim to recover full momentum from text alone; we **evaluate** a simple two-stage pipeline—(i) sentiment classifiers, (ii) temporal aggregation and correlation against a transparent proxy derived from `score_context` strings—and report where it succeeds and fails.
+
 
 ## 2. Related work
 
@@ -37,6 +43,7 @@ Live match threads are short, slang-heavy, and only loosely tied to latent game 
 
 We train weak-supervised baselines with seed **42**, evaluate on the held-out **match split** (`sentiment_models/**/_metrics.json` and `sentiment_eval/metrics_*.json`), and run momentum JSON export for the **default (hidden 128) LSTM** and NB (qualitative pattern matches the smaller LSTM).
 
+
 ## 5. Results
 
 ### 5.1 Dataset snapshot
@@ -49,12 +56,27 @@ Additional histograms (comments per match, phase counts) remain in `nlp/ProjectD
 
 ### 5.2 Classification (weak labels, test split, n=390)
 
-| Model | Macro-F1 | neg F1 | neu F1 | pos F1 |
-|-------|-----------|--------|--------|--------|
-| NB unigram | 0.606 | 0.40 | 0.89 | 0.53 |
-| NB bigram | 0.596 | 0.33 | 0.89 | 0.57 |
-| LSTM, hidden 128 | **0.658** | 0.45 | 0.91 | 0.62 |
-| LSTM, hidden 64 | 0.640 | 0.40 | 0.90 | 0.62 |
+Per-class metrics from `sklearn` classification reports on the held-out match split (NB unigram and both LSTMs: `sentiment_eval/metrics_*.json`; NB bigram: `sentiment_models/nb_bigram/nb_bigram_metrics.json` test split—same protocol as unigram).
+
+**Macro-F1 and negative class (minority, hardest).**
+
+| Model | Macro-F1 | Neg P | Neg R | Neg F1 |
+|-------|----------|-------|-------|--------|
+| NB unigram | 0.606 | 0.55 | 0.32 | 0.40 |
+| NB bigram | 0.596 | 0.80 | 0.21 | 0.33 |
+| LSTM, hidden 128 | **0.658** | 0.48 | 0.42 | 0.45 |
+| LSTM, hidden 64 | 0.640 | 0.83 | 0.26 | 0.40 |
+
+**Neutral and positive classes.**
+
+| Model | Neu P | Neu R | Neu F1 | Pos P | Pos R | Pos F1 |
+|-------|-------|-------|--------|-------|-------|--------|
+| NB unigram | 0.85 | 0.94 | 0.89 | 0.61 | 0.46 | 0.53 |
+| NB bigram | 0.82 | 0.97 | 0.89 | 0.73 | 0.46 | 0.57 |
+| LSTM, hidden 128 | 0.89 | 0.92 | 0.91 | 0.64 | 0.60 | 0.62 |
+| LSTM, hidden 64 | 0.86 | 0.94 | 0.90 | 0.62 | 0.62 | 0.62 |
+
+The **negative** class remains the weakest category. Reporting precision and recall separately shows that the difficulty is driven primarily by **limited recovery of negative examples** (low **recall** on neg for unigram and bigram NB, and for the small LSTM despite high neg precision on weak labels—i.e. **missed negatives** under class imbalance) rather than headline accuracy alone.
 
 **Bigram NB** underperforms unigram on **macro-F1** despite slightly higher positive F1: with **short messages** and a **match-aware** split, many bigrams are **sparse** or appear only in one fixture, so the vectorizer sees **fragmented statistics** relative to unigrams; the model can also **overfit** bigram patterns on the training matches without transferring.
 
@@ -62,9 +84,11 @@ Additional histograms (comments per match, phase counts) remain in `nlp/ProjectD
 
 ### 5.3 Momentum proxy
 
-With **during**-phase filtering, **five** matches contribute to aggregate momentum statistics. Mean lag correlations (Pearson / Spearman) stay **close to zero** across lag offsets (see `momentum_report_lstm.json`); we interpret this as **weak linear coupling** between chat polarity scores and our coarse proxy—not as proof of absence of all structure (see exemplar plots in `figures/`).
+Figure: mean lag correlation (Pearson / Spearman) between per-comment sentiment scores and the swing proxy, aggregated across matches (**default LSTM**, `during` phase).
 
-![Mean lag correlations (LSTM scores, default model)](figures/momentum_lstm/momentum_lag_correlations.png)
+![Mean lag correlations (LSTM scores, default model)](figures/momentum_lstm/momentum_lag_correlations.png){width=72%}
+
+With **during**-phase filtering, **five** matches contribute to aggregate momentum statistics. Mean lag correlations (Pearson / Spearman) stay **close to zero** across lag offsets (see `momentum_report_lstm.json`); we interpret this as **weak linear coupling** between chat polarity scores and our coarse proxy—not as proof of absence of all structure (see exemplar plots in `figures/`).
 
 ## 6. Discussion
 
@@ -74,6 +98,9 @@ Weak-label evaluation **overstates** agreement with the lexicon; **gold** metric
 
 We documented an honest end-to-end pipeline: match-aware sentiment baselines, an extra LSTM width ablation, and velocity-based analysis against a scoreline proxy. The headline result is **cautious**: **macro-F1** gains from the larger LSTM are real on weak labels, but **gold** performance and **momentum correlations** show that **forum text alone is a weak stand-in for momentum** at our scale.
 
+```{=latex}
+\FloatBarrier
+```
 ## References
 
 [1] J. Moon *et al.*, “Analyzing Norm Violations in Live-Stream Chat,” EMNLP, 2023. https://aclanthology.org/2023.emnlp-main.55/

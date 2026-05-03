@@ -18,6 +18,8 @@ Run from the repository root with Python environment containing `torch`, `scikit
 14. `python scripts/plot_momentum_report.py --input nlp/ProjectDocs/momentum_report_lstm.json --out-dir nlp/ProjectDocs/figures/momentum_lstm`
 15. `python scripts/plot_match_velocity_exemplar.py --model-type nb --out nlp/ProjectDocs/figures/exemplar_match_velocity_nb.png`
 
-**PDF report:** `pandoc nlp/ProjectDocs/FINAL_NLP_REPORT.md -o nlp/ProjectDocs/FINAL_NLP_REPORT.pdf --resource-path=nlp/ProjectDocs -V geometry:margin=1in`
+**PDF report** (YAML `header-includes` for `placeins`, raw `\FloatBarrier` before references, and optional image `width=` need these formats):
+
+`pandoc nlp/ProjectDocs/FINAL_NLP_REPORT.md -o nlp/ProjectDocs/FINAL_NLP_REPORT.pdf -f markdown+yaml_metadata_block+raw_attribute --resource-path=nlp/ProjectDocs -V geometry:margin=1in`
 
 See [`docs/HLTV_SENTIMENT_COLLECTION.md`](../docs/HLTV_SENTIMENT_COLLECTION.md) for legal constraints, robots.txt, and import paths.
