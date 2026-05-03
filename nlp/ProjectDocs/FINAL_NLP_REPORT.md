@@ -1,6 +1,8 @@
 ---
 header-includes: |
   \usepackage{placeins}
+  \usepackage{xurl}
+  \setlength{\emergencystretch}{2em}
 ---
 
 # Evaluating temporal sentiment as a signal for momentum-like scoreline swings in CS2 match threads
@@ -41,7 +43,7 @@ Live match threads are short, slang-heavy, and only loosely tied to latent game 
 
 ## 4. Experiments
 
-We train weak-supervised baselines with seed **42**, evaluate on the held-out **match split** (`sentiment_models/**/_metrics.json` and `sentiment_eval/metrics_*.json`), and run momentum JSON export for the **default (hidden 128) LSTM** and NB (qualitative pattern matches the smaller LSTM).
+We train weak-supervised baselines with seed **42** and evaluate on the held-out **match split**. Metrics are written as JSON next to saved checkpoints and under the evaluation output directory (exact filenames are listed in **REPRO_COMMANDS.md**). We export momentum summaries for the **default (hidden 128) LSTM** and for NB; the lag-correlation pattern is qualitatively similar for the smaller LSTM.
 
 
 ## 5. Results
@@ -56,7 +58,7 @@ Additional histograms (comments per match, phase counts) remain in `nlp/ProjectD
 
 ### 5.2 Classification (weak labels, test split, n=390)
 
-Per-class metrics from `sklearn` classification reports on the held-out match split (NB unigram and both LSTMs: `sentiment_eval/metrics_*.json`; NB bigram: `sentiment_models/nb_bigram/nb_bigram_metrics.json` test split—same protocol as unigram).
+Per-class metrics come from `sklearn` classification reports on the held-out match split. For NB unigram and both LSTMs we read the weak-label eval JSON produced by `eval_sentiment.py`; for NB bigram we use the test split metrics saved with the bigram training run (same split protocol as unigram).
 
 **Macro-F1 and negative class (minority, hardest).**
 
