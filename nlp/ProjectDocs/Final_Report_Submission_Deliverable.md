@@ -1,3 +1,5 @@
 You need to complete a final report in the style of a conference submission. Write a report (4-6 pages) in a structured format: abstract, introduction, related work (literature review), methodology (dataset, models, experiments), results and analysis, conclusion, and references.
 
 **Canonical submission draft (Markdown + generated PDF):** [`FINAL_NLP_REPORT.md`](FINAL_NLP_REPORT.md) and [`FINAL_NLP_REPORT.pdf`](FINAL_NLP_REPORT.pdf). Supporting tables and plots live under [`figures/`](figures/) and JSON metrics in this folder (`dataset_stats.json`, `momentum_report_*.json`).
+
+**External / second-pass review pack:** [`report_verification_bundle/`](report_verification_bundle/) — copies of the report, frozen metrics JSON, methodology source files, figures, bibliography, course guidelines, and [`report_verification_bundle/VERIFICATION_CHECKLIST.md`](report_verification_bundle/VERIFICATION_CHECKLIST.md) for systematic cross-checking.

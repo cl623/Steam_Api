@@ -1,0 +1,109 @@
+# HLTV sentiment data collection
+
+This project can store match metadata and forum-style comments in `data/hltv_sentiment.db` for NLP experiments (`nlp/` package and `scripts/train_sentiment_*.py`).
+
+## Legal and robots.txt
+
+- Review [HLTV Terms of Use](https://www.hltv.org/terms-of-use) before collecting data.
+- [HLTV robots.txt](https://www.hltv.org/robots.txt) disallows crawling under `/forums/*` and many filtered `/matches?*` URLs. **Automated forum fetches are off by default** in `scripts/run_hltv_comment_collector.py`; use `--fetch-forum` only when you are permitted to do so.
+- Do not redistribute scraped text if the site terms prohibit it.
+
+## Cloudflare
+
+Many unattended HTTP clients receive a Cloudflare challenge instead of real HTML. If live `requests` fail, save HTML from a normal browser session and pass:
+
+- `--match-html-file path/to/match.html`
+- `--forum-html-file path/to/thread.html`
+- `--forum-html-only` with `--forum-html-file` skips the match HTTP request (minimal match row only).
+
+## Commands
+
+1. Create / migrate the DB:
+
+   `python scripts/migrate_hltv_sentiment_db.py`
+
+2. Collect (example):
+
+   `python scripts/run_hltv_comment_collector.py --match-id 2378402`
+
+3. Or import rows you already have:
+
+   `python scripts/run_hltv_comment_collector.py --import-jsonl comments.jsonl`
+
+   JSONL fields per line: `match_id`, `comment_id`, `raw_text`, optional `posted_at_unix`, `score_context`, `thread_url`.
+
+4. Train baselines:
+
+   `python scripts/train_sentiment_nb.py --ngram unigram`
+
+   `python scripts/train_sentiment_lstm.py --epochs 10`
+
+5. Evaluate:
+
+   `python scripts/eval_sentiment.py --model-type nb`
+
+## Rate limiting
+
+The collector sleeps `--min-delay` seconds (default 2.5) between HTTP requests. Increase it if you see throttling or blocks.
+
+## Reproducible runbook (end-to-end)
+
+Replace paths as needed. Default DB: `data/hltv_sentiment.db`. Training artifacts: `sentiment_models/` (gitignored). Eval outputs: `sentiment_eval/` (gitignored).
+
+### A) Synthetic multimatch sample (no HLTV network)
+
+```text
+python scripts/build_sample_multimatch_dataset.py
+python scripts/import_sample_multimatch.py
+python scripts/train_sentiment_nb.py --split-mode by_match --ngram unigram --label-source hybrid
+python scripts/train_sentiment_nb.py --split-mode by_match --ngram bigram --label-source hybrid --save-dir sentiment_models/nb
+python scripts/train_sentiment_lstm.py --split-mode by_match --epochs 15 --label-source hybrid
+python scripts/eval_sentiment.py --model-type nb --label-source weak --split-mode by_match
+python scripts/eval_sentiment.py --model-type nb --label-source gold --split-mode by_match
+python scripts/eval_sentiment.py --model-type lstm --checkpoint sentiment_models/lstm/lstm_weak.pt --label-source weak --split-mode by_match
+python scripts/eval_sentiment_momentum.py --model-type nb --checkpoint sentiment_models/nb/nb_unigram.joblib
+```
+
+Hand labels: CSV columns `match_id`, `comment_id`, `label` (`neg`/`neu`/`pos` or `0`/`1`/`2`). Apply anytime:
+
+`python scripts/import_gold_labels.py samples/gold_labels_example.csv`
+
+Optional JSONL field `gold_label` is applied on import via [`collector/hltv_comments.py`](collector/hltv_comments.py).
+
+### B) Flags to record for a paper / report
+
+- `--seed` (training and split reproducibility)
+- `--split-mode` (`by_match` for generalization across matches)
+- `--label-source` (`weak`, `hybrid`, `gold` for training; `eval_sentiment.py` supports `weak` vs `gold` truth on the eval split)
+- Model paths written next to `nb_*_metrics.json` / `lstm_metrics.json`
+
+### C) Momentum / velocity report
+
+[`scripts/eval_sentiment_momentum.py`](scripts/eval_sentiment_momentum.py) aggregates per-match velocity bins (`--bin-seconds`) and lag correlations (`--lag-steps`, comment-index offsets) against the scoreline swing proxy. Output: `sentiment_eval/momentum_report.json`.
+
+## Time-sync workflow (pre/during/post)
+
+To avoid mixing pre/post chatter into in-match velocity:
+
+1. Ensure schema includes `match_start_unix` and `match_end_unix`:
+
+   `python scripts/migrate_hltv_sentiment_db.py`
+
+2. Ingest data (HTML/JSONL paths above).
+3. Validate timing quality:
+
+   `python scripts/validate_time_sync.py`
+
+4. Train NB with optional pre-match prior:
+
+   `python scripts/train_sentiment_nb.py --use-pre-match-prior --split-mode by_match`
+
+5. Run momentum eval using only in-match comments:
+
+   `python scripts/eval_sentiment_momentum.py --phase during --time-axis seconds`
+
+If second-level timestamps are weak/missing, use round-bin fallback:
+
+`python scripts/eval_sentiment_momentum.py --phase during --time-axis round_bin`
+
+When using fallback, explicitly state in your report that timing was synchronized by score-context round progression rather than absolute seconds.

@@ -1,0 +1,84 @@
+{
+  "train": {
+    "n": 1257,
+    "f1_macro": 0.902822695111916,
+    "f1_micro": 0.9419252187748608,
+    "confusion_matrix": [
+      [
+        121,
+        35,
+        1
+      ],
+      [
+        4,
+        904,
+        4
+      ],
+      [
+        6,
+        23,
+        159
+      ]
+    ],
+    "report": "              precision    recall  f1-score   support\n\n         neg       0.92      0.77      0.84       157\n         neu       0.94      0.99      0.96       912\n         pos       0.97      0.85      0.90       188\n\n    accuracy                           0.94      1257\n   macro avg       0.94      0.87      0.90      1257\nweighted avg       0.94      0.94      0.94      1257\n"
+  },
+  "val": {
+    "n": 527,
+    "f1_macro": 0.5629080018843798,
+    "f1_micro": 0.8481973434535104,
+    "confusion_matrix": [
+      [
+        4,
+        24,
+        5
+      ],
+      [
+        1,
+        407,
+        11
+      ],
+      [
+        1,
+        38,
+        36
+      ]
+    ],
+    "report": "              precision    recall  f1-score   support\n\n         neg       0.67      0.12      0.21        33\n         neu       0.87      0.97      0.92       419\n         pos       0.69      0.48      0.57        75\n\n    accuracy                           0.85       527\n   macro avg       0.74      0.52      0.56       527\nweighted avg       0.83      0.85      0.82       527\n"
+  },
+  "test": {
+    "n": 390,
+    "f1_macro": 0.6058016327948584,
+    "f1_micro": 0.8000000000000002,
+    "confusion_matrix": [
+      [
+        12,
+        19,
+        7
+      ],
+      [
+        5,
+        270,
+        12
+      ],
+      [
+        5,
+        30,
+        30
+      ]
+    ],
+    "report": "              precision    recall  f1-score   support\n\n         neg       0.55      0.32      0.40        38\n         neu       0.85      0.94      0.89       287\n         pos       0.61      0.46      0.53        65\n\n    accuracy                           0.80       390\n   macro avg       0.67      0.57      0.61       390\nweighted avg       0.78      0.80      0.78       390\n"
+  },
+  "split": {
+    "split_mode": "by_match",
+    "val_fraction": 0.15,
+    "test_fraction": 0.15,
+    "random_state": 42,
+    "n_train": 1257,
+    "n_val": 527,
+    "n_test": 390
+  },
+  "ngram": "unigram",
+  "label_source": "weak",
+  "use_pre_match_prior": false,
+  "pre_match_class_prior": null
+}

@@ -1,0 +1,30 @@
+{
+  "db_path": "C:\\Users\\clagg\\Downloads\\Steam_API\\Steam_Api\\Steam_Api\\data\\hltv_sentiment.db",
+  "n_comments": 2174,
+  "n_matches": 16,
+  "comments_per_match": {
+    "min": 2,
+    "max": 635,
+    "mean": 135.875,
+    "median": 12.0
+  },
+  "weak_label_counts": {
+    "neg": 228,
+    "neu": 1618,
+    "pos": 328
+  },
+  "gold_labeled_comments": 530,
+  "posted_at_unix_nonnull_fraction": 1.0,
+  "score_context_nonempty_fraction": 1.0,
+  "comment_phase_counts": {
+    "during": 1017,
+    "pre": 631,
+    "post": 404,
+    "unknown": 122
+  },
+  "posted_at_unix_range": {
+    "min": 1700000060.0,
+    "max": 1791005825.0,
+    "span_seconds": 91005765.0
+  }
+}

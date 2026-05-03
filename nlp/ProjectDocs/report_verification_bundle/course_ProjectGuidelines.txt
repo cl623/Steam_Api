@@ -1,0 +1,21 @@
+Final Project Breakdown
+The final project offers you the chance to apply your newly acquired skills towards an in-depth NLP application. You are required to complete the final project individually as a single person project. The aim is to answer a scientific question and provide some kind of scientific knowledge gain similar to typical NLP research papers. The project instructions are given as follows:
+
+Literature Review and Dataset Exploration
+Select an NLP topic or task covered in the course that they find interesting (e.g., text classification, named entity recognition, machine translation, etc.).
+Conduct a literature review on the selected topic, summarizing and critiquing 3-5 recent research papers from major NLP conferences (e.g., ACL, NAACL, EMNLP) from the past 2-3 years. For an example of a conference style paper, see the ACl paper Ellipsis-Dependent ReasoningLinks to an external site.. For an example of a student submission, see the Student Final Project Sample. 
+Identify and explore a publicly available dataset relevant to their chosen topic, providing descriptive statistics and visualizations.
+Model Implementation and Evaluation
+Based on the literature review, implement one or more baseline models for their chosen task using the selected dataset.
+Train and evaluate the models using appropriate metrics and techniques discussed in the course.
+Experiment with different model architectures, hyperparameters, or techniques to improve performance.
+Analysis and Write-up
+Analyze their model's performance, strengths, weaknesses, and potential areas for improvement.
+Write a report (4-6 pages) in a structured format: abstract, introduction, related work (literature review), methodology (dataset, models, experiments), results and analysis, conclusion, and references.
+The report should demonstrate a thorough understanding of the topic, critically analyze the existing literature, and discuss the implications of their findings.
+Deliverables
+The final project is worth 20% of your course grade. Deliverables include:
+
+Module 6 Assignment: Proposal (0%): You need to turn in a one-page proposal by module 6. The proposal should outline what you propose to do and a rough plan for how you will pursue the project. We will then provide feedback and guidance on the direction to maximize the project’s chance of succeeding. The proposal is not graded.
+Module 10 Assignment: Draft Submission (5%): Submit a draft of your final report by module 10. This draft should include a detailed outline of your final report, at least half of the content completed, and preliminary results. The purpose of the draft submission is to ensure that you are making adequate progress and to provide an opportunity for feedback before the final submission. This draft will be graded on completeness and coherence, and it will also be an occasion for the professor to identify and support students who may be struggling with their projects.
+Module 14 Assignment: Final Report (15%): You need to complete a final report in the style of a conference submission. Write a report (4-6 pages) in a structured format: abstract, introduction, related work (literature review), methodology (dataset, models, experiments), results and analysis, conclusion, and references.
