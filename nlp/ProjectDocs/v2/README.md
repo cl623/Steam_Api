@@ -1,0 +1,1 @@
+This folder marks **report version 2** work on branch `feature/nlp-report-v2`. The canonical manuscript is [`../FINAL_NLP_REPORT.md`](../FINAL_NLP_REPORT.md) (and generated PDF). Version 1 text remains in git history on `feature/nlp-final-report`; reviewer notes are in [`../Verification_Version1.md`](../Verification_Version1.md).

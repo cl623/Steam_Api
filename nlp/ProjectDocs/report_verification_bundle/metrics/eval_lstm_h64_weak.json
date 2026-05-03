@@ -1,0 +1,28 @@
+{
+  "f1_macro": 0.6395525115333187,
+  "confusion_matrix": [
+    [
+      10,
+      19,
+      9
+    ],
+    [
+      2,
+      270,
+      15
+    ],
+    [
+      0,
+      25,
+      40
+    ]
+  ],
+  "classification_report": "              precision    recall  f1-score   support\n\n         neg       0.83      0.26      0.40        38\n         neu       0.86      0.94      0.90       287\n         pos       0.62      0.62      0.62        65\n\n    accuracy                           0.82       390\n   macro avg       0.77      0.61      0.64       390\nweighted avg       0.82      0.82      0.80       390\n",
+  "n_eval": 390,
+  "velocity_bin_seconds": 120.0,
+  "velocity_mean": -8.309191592925724e-05,
+  "correlation_sentiment_score_vs_swing_proxy_pearson": -0.16002177045972793,
+  "correlation_sentiment_score_vs_swing_proxy_spearman": -0.10777887335635239,
+  "label_source": "weak",
+  "note": "Swing proxy uses score_context round-diff heuristic; y_true follows label_source."
+}

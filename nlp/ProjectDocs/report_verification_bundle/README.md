@@ -9,8 +9,10 @@ This folder is a **self-contained snapshot** for a second reviewer (human or LLM
 | `FINAL_NLP_REPORT.md` / `.pdf` | The report under review (Markdown is authoritative for diffs; PDF for layout). |
 | `references.bib` | Bibliography entries cited in the report. |
 | `frozen_outputs/` | JSON written by the same pipeline the report describes (`dataset_stats.json`, `momentum_report_*.json`). |
-| `metrics/eval_*.json` | Copies of `sentiment_eval/metrics_*.json` from classification evaluation (macro-F1, correlations, n_eval). |
-| `metrics/training_*.json` | Copies of `sentiment_models/**/_metrics.json` (per-split F1, confusion matrices, split meta). |
+| `metrics/eval_*.json` | Copies of `sentiment_eval/metrics_*.json` from classification evaluation (includes `eval_lstm_h64_*` for the v2 LSTM ablation). |
+| `metrics/training_*.json` | Copies of `sentiment_models/**/_metrics.json` (includes `training_lstm_h64_metrics.json`). |
+| `REPRO_COMMANDS.md` | Full shell runbook copied from [`../REPRO_COMMANDS.md`](../REPRO_COMMANDS.md). |
+| `Verification_Version1.md` | External review notes that drove report v2 edits. |
 | `methodology_source/` | Copies of `nlp/*.py` and `scripts/*sentiment*.py` (and stats script) that define labels, splits, models, velocity, and momentum evaluation. |
 | `figures/` | Copies of PNGs embedded in the report (confusion matrices, dataset exploration, momentum plots, exemplar). |
 | `docs_HLTV_SENTIMENT_COLLECTION.md` | Copy of repo `docs/HLTV_SENTIMENT_COLLECTION.md` for ingest/ethics/commands cross-check against section 3.1. |
@@ -26,9 +28,9 @@ This folder is a **self-contained snapshot** for a second reviewer (human or LLM
 
 ## Limitations
 
-- **Database not included:** `data/hltv_sentiment.db` may be large, gitignored, or sensitive; this bundle assumes metrics JSON reflects the corpus the author used. To fully re-run experiments, clone the repo and use the commands listed in section 4 of the report.
+- **Database not included:** `data/hltv_sentiment.db` may be large, gitignored, or sensitive; this bundle assumes metrics JSON reflects the corpus the author used. To fully re-run experiments, clone the repo and follow `REPRO_COMMANDS.md`.
 - **Checkpoint weights not included:** trained `.joblib` / `.pt` files are omitted to save space; retraining reproduces metrics if the DB is unchanged.
 
 ## Bundle version
 
-Generated as part of the NLP final report workflow. Paths inside `methodology_source/` preserve original module layout (`nlp/...`, `scripts/...`) for clarity.
+**v2** (`feature/nlp-report-v2`): ACL/EMNLP-only related work, LSTM hidden-size ablation, shortened main report with commands externalized to `REPRO_COMMANDS.md`. Paths inside `methodology_source/` preserve original module layout (`nlp/...`, `scripts/...`) for clarity.
