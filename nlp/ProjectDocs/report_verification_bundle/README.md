@@ -14,6 +14,7 @@ This folder is a **self-contained snapshot** for a second reviewer (human or LLM
 | `REPRO_COMMANDS.md` | Full shell runbook copied from [`../REPRO_COMMANDS.md`](../REPRO_COMMANDS.md). |
 | `Verification_Version1.md` | External review notes that drove report v2 edits. |
 | `Verification_Version2.md` | Layout + classification P/R checklist (v2.1). |
+| `Verification_Version3.md` | Voice, related-work structure, hyperparameters, appendix figures (v3 pass). |
 | `methodology_source/` | Copies of `nlp/*.py` and `scripts/*sentiment*.py` (and stats script) that define labels, splits, models, velocity, and momentum evaluation. |
 | `figures/` | Copies of PNGs embedded in the report (confusion matrices, dataset exploration, momentum plots, exemplar). |
 | `docs_HLTV_SENTIMENT_COLLECTION.md` | Copy of repo `docs/HLTV_SENTIMENT_COLLECTION.md` for ingest/ethics/commands cross-check against section 3.1. |
