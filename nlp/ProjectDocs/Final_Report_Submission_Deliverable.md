@@ -1,9 +1,0 @@
-You need to complete a final report in the style of a conference submission. Write a report (4-6 pages) in a structured format: abstract, introduction, related work (literature review), methodology (dataset, models, experiments), results and analysis, conclusion, and references.
-
-**Canonical submission draft (Markdown + generated PDF):** [`FINAL_NLP_REPORT.md`](FINAL_NLP_REPORT.md) and [`FINAL_NLP_REPORT.pdf`](FINAL_NLP_REPORT.pdf). Supporting tables and plots live under [`figures/`](figures/) and JSON metrics in this folder (`dataset_stats.json`, `momentum_report_*.json`).
-
-**External / second-pass review pack:** [`report_verification_bundle/`](report_verification_bundle/) — copies of the report, frozen metrics JSON, methodology source files, figures, bibliography, course guidelines, reviewer notes (`Verification_Version1.md`, `Verification_Version2.md`, `Verification_Version3.md`), full shell runbook (`REPRO_COMMANDS.md`), and [`report_verification_bundle/VERIFICATION_CHECKLIST.md`](report_verification_bundle/VERIFICATION_CHECKLIST.md) for systematic cross-checking.
-
-**Report v2** (branch `feature/nlp-report-v2`): shorter 4–6 page target manuscript, ACL/EMNLP-only related work with per-paper limitations, LSTM hidden-size ablation, bigram discussion, and commands moved to [`REPRO_COMMANDS.md`](REPRO_COMMANDS.md). Working notes: [`v2/README.md`](v2/README.md).
-
-**Report v3 pass (style + depth):** first-person voice, thematic related work (no per-citation *Limitation* / *Gap* template), concrete LSTM hyperparameters and vocabulary size, dataset noise examples, deeper negative-class post-mortem, removal of “honest” framing, appendix figures for comments-per-match and phase counts — guided by [`Verification_Version3.md`](Verification_Version3.md).
