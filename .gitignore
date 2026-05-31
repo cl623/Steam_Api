@@ -65,3 +65,28 @@ test_pause.txt
 *.tmp
 *.bak
 *.backup
+
+# Private / coursework / internal docs (keep local, do not publish on main)
+nlp/ProjectDocs/
+docs/COURSE_*.md
+docs/FINAL_*.md
+docs/PROJECT_SUMMARY_BEFORE_COURSE_PROJECT.md
+docs/VERSION*.md
+docs/DEEP_LEARNING_*.txt
+docs/*_ANALYSIS.md
+docs/CODE_REVIEW.md
+docs/BACKTEST_RESULTS.md
+docs/CODE_REVIEW.md
+docs/COLLECTOR_READINESS_REVIEW.md
+docs/DATABASE_COLLECTION_REVIEW.md
+docs/DATA_COLLECTION_IMPROVEMENTS.md
+docs/IMPROVEMENTS_IMPLEMENTED.md
+docs/MODEL_IMPROVEMENTS.md
+docs/Project Proposal_*.pdf
+docs/*.pdf
+
+# Raw scrape dumps and legacy artifacts
+HLTV/
+__pycache__/
+*.pyc
+migration.log

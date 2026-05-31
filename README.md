@@ -97,11 +97,14 @@ python scripts/run_collector.py
 
 ## Documentation
 
-- **[User Guide](docs/USER_GUIDE.md)** - Complete setup and usage instructions
-- **[Cookie Setup Guide](docs/COOKIE_SETUP_GUIDE.md)** - Detailed cookie configuration
-- **[Database Schema Review](docs/DATABASE_SCHEMA_ML_REVIEW.md)** - ML optimization details
-- **[Data Collection Improvements](docs/DATA_COLLECTION_IMPROVEMENTS.md)** - Collector enhancements
-- **[ML Scripts and Features](docs/ML_SCRIPTS_AND_FEATURES.md)** - Machine learning: training, comparison, diagnostics, monitoring (Version 2.2)
+Public docs for forks and contributors are listed in **[docs/PUBLIC_DOCS_INDEX.md](docs/PUBLIC_DOCS_INDEX.md)**.
+
+- **[User Guide](docs/USER_GUIDE.md)** — setup and usage
+- **[Cookie Setup Guide](docs/COOKIE_SETUP_GUIDE.md)** — Steam authentication
+- **[ML Scripts and Features](docs/ML_SCRIPTS_AND_FEATURES.md)** — training, comparison, diagnostics
+- **[Repository Catalogue](docs/REPOSITORY_CATALOGUE.md)** — file categories and what belongs on the public remote
+
+Course submission materials (reports, roadmaps, grading bundles) stay local and in [DS677_CourseProject](https://github.com/cl623/DS677_CourseProject).
 
 ## Key Features
 
@@ -132,7 +135,7 @@ The app uses **return-based, event-aware** models (Random Forest or Gradient Boo
 - **Diagnostics:** `python -m ml.model_diagnostics --model-dir <path> --game-id 730` to evaluate a saved model and generate scatter/histogram/feature-importance plots.
 - **Prediction logging:** Set `PRICE_PREDICTOR_LOG_PREDICTIONS=1` to log each prediction to `logs/prediction_log.csv`.
 
-**Documentation:** [ML Scripts and Features](docs/ML_SCRIPTS_AND_FEATURES.md) (scripts, training API, comparison, monitoring). See also [VERSION2.2](docs/VERSION2.2.md) for milestones and production model choice.
+**Documentation:** [ML Scripts and Features](docs/ML_SCRIPTS_AND_FEATURES.md) (scripts, training API, comparison, monitoring). See [Model Summary](docs/MODEL_SUMMARY.md) for model generations.
 
 ## Troubleshooting
 
