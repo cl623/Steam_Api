@@ -1,4 +1,5 @@
 """Utility functions for the Steam Market application"""
+import os
 import requests
 import time
 import base64
@@ -100,8 +101,34 @@ def validate_steam_token_audience(steamLoginSecure):
         print(f"[VALIDATION] Traceback: {traceback.format_exc()}")
         return False, [], f"Error validating token: {str(e)}"
 
+def get_steam_cookies_from_env():
+    """Load Steam cookies from environment (e.g. Cursor Cloud secrets)."""
+    cookie_string = os.getenv('STEAM_COOKIE_STRING', '').strip()
+    if cookie_string:
+        cookies = parse_cookie_string(cookie_string)
+        if cookies.get('sessionid') and cookies.get('steamLoginSecure'):
+            return cookies
+
+    sessionid = os.getenv('STEAM_SESSIONID', '').strip()
+    steam_login_secure = os.getenv('STEAM_LOGIN_SECURE', '').strip()
+    if sessionid and steam_login_secure:
+        cookies = {
+            'sessionid': sessionid,
+            'steamLoginSecure': steam_login_secure,
+        }
+        if os.getenv('STEAM_BROWSERID'):
+            cookies['browserid'] = os.getenv('STEAM_BROWSERID', '').strip()
+        if os.getenv('STEAM_COUNTRY'):
+            cookies['steamCountry'] = os.getenv('STEAM_COUNTRY', '').strip()
+        if os.getenv('STEAM_WEB_TRADE_ELIGIBILITY'):
+            cookies['webTradeEligibility'] = os.getenv('STEAM_WEB_TRADE_ELIGIBILITY', '').strip()
+        return cookies
+
+    return None
+
+
 def get_steam_cookies():
-    """Get Steam cookies from session or return defaults"""
+    """Get Steam cookies: Flask session, then env secrets, then config defaults."""
     # Check if user has cookies in session (from Settings page)
     if 'steam_cookies' in session and session['steam_cookies']:
         cookies = session['steam_cookies']
@@ -119,12 +146,27 @@ def get_steam_cookies():
                 print("Please update your cookies from https://steamcommunity.com (not store.steampowered.com)")
             
             return cookies
+
+    env_cookies = get_steam_cookies_from_env()
+    if env_cookies:
+        sessionid_preview = env_cookies.get('sessionid', '')[:20]
+        print(f"Using cookies from environment - sessionid: {sessionid_preview}...")
+        steam_login_secure = env_cookies.get('steamLoginSecure', '')
+        is_valid, audience, error_msg = validate_steam_token_audience(steam_login_secure)
+        if not is_valid:
+            print(f"WARNING: {error_msg}")
+            print(f"Token audience: {audience}")
+        return env_cookies
+
     return DEFAULT_STEAM_COOKIES.copy()
 
 def get_steamapis_key():
-    """Get SteamApis key from session or return default"""
+    """Get SteamApis key from session, environment, or default."""
     if 'steamapis_key' in session and session['steamapis_key']:
         return session['steamapis_key']
+    env_key = os.getenv('STEAMAPIS_KEY', '').strip()
+    if env_key:
+        return env_key
     return DEFAULT_STEAMAPIS_KEY
 
 def make_request(url, headers, params=None, max_retries=3):

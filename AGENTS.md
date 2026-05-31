@@ -25,7 +25,22 @@ Use **tmux** for long-running dev servers (e.g. session `flask-dev-server`).
 
 ### Steam cookies
 
-Price history and some market calls need valid Steam session cookies (`sessionid`, `steamLoginSecure`). Sources: `app/config.py` defaults, Settings UI (`/settings`), or `python scripts/test_cookies.py --cookie-string "..." --auto-update-config`. Without cookies, browse may work but price-history features fail.
+Price history and some market calls need valid Steam session cookies (`sessionid`, `steamLoginSecure`). Priority (highest first):
+
+1. Flask session (Settings UI `/settings`)
+2. **Environment secrets** (recommended for Cloud Agents)
+3. `app/config.py` `DEFAULT_STEAM_COOKIES`
+
+Configure Cloud secrets as either:
+
+- **`STEAM_COOKIE_STRING`** — full browser `Cookie` header value (`sessionid=...; steamLoginSecure=...; ...`), or
+- **`STEAM_SESSIONID`** + **`STEAM_LOGIN_SECURE`** (optional: `STEAM_BROWSERID`, `STEAM_COUNTRY`, `STEAM_WEB_TRADE_ELIGIBILITY`)
+
+Optional API key: **`STEAMAPIS_KEY`** (overrides config default when not set in Settings).
+
+Validate: `python scripts/test_cookies.py` (reads the same env vars). Collector (`scripts/run_collector.py`) already used env before Flask; `get_steam_cookies()` in `app/utils.py` now matches.
+
+Without valid cookies, market browse may work but price-history features fail.
 
 ### Database
 
